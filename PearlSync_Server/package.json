@@ -1,0 +1,12 @@
+{
+  "name": "pearlsync_server",
+  "version": "0.1.0",
+  "main": "main.js",
+  "description": "Sincronization of files between two or more computers",
+  "dependencies": {
+    "express": "^4.16.4",
+    "pouchdb": "^7.0.0"
+  },
+  "author": "Paulo André Rieck",
+  "license": "MIT"
+}

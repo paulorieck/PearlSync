@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+    <head>
+
+        <meta charset="utf-8">
+        <title>PearlSync</title>
+
+        <!-- Insert this line above script imports  -->
+        <script>if (typeof module === 'object') {window.module = module; module = undefined;}</script>
+
+        <link href="client_interface/bootstrap.min.css" rel="stylesheet">
+        <link href="client_interface/bootstrap-combobox/bootstrap-combobox.css" rel="stylesheet">
+        <link href="client_interface/glyphicons/css/glyphicons.css" rel="stylesheet">
+        <script src="client_interface/jquery-3.3.1.min.js"></script>
+        <script src="client_interface/bootstrap.min.js"></script>
+        <script src="client_interface/bootstrap-combobox/boostrap-combobox.js"></script>
+        <script src="client_interface/require.min.js"></script>
+
+        <!-- Insert this line after script imports -->
+        <script>if (window.module) module = window.module;</script>
+    
+        <style>
+            body {
+                background-color: rgb(51, 51, 51);
+                color:#fff;
+            }
+            .container-full {
+                padding-top: 10%;
+                background-color: transparent;
+            }
+            .modal-content {
+                background-color: #4c4c4c;
+                color:#fff;
+            }
+            .btn-secondary {
+                color:rgb(132, 132, 132);
+            }
+            .close {
+                color:#fff;
+            }
+            .btn.focus, .btn:focus, .btn:hover {
+                color:#94b3ff;
+            }
+            a {
+                color: #fff;
+                cursor: pointer;
+            }
+        </style>
+
+    </head>
+
+    <body>
+
+        <div id="left-menu" class="col-sm-3" style="background-color: rgb(82, 115, 165); border: 0;">
+            <p>
+                <img src="client_interface/shareit_512x512.png" style="width: 25%; display: block; margin-left: auto; margin-right: auto; margin-top: 20px;" />
+            </p>
+            <ul style="list-style-type: none; padding-inline-start: 0px;">
+                <li><a href="#div_main">Painel</a></li>
+                <li><a href="#div_connections">Conexões</a></li>
+                <li><a href="#div_shares">Compartilhamentos</a></li>
+                <li><a id="invitationsLink">Convites</a></li>
+                <li><a href="#div_createNewShare">Novo Compartilhamento</a></li>
+                <li><a href="#div_transfers">Transferências</a></li>
+                <li><a href="#div_configs">Configurações</a></li>
+                <li><a href="#div_about">Sobre</a></li>
+            </ul>
+        </div>
+        
+        <div class="col-sm-9">
+            <div id="div_main">
+                <div class="col-sm-12 text-center">
+                </div>
+            </div>
+            <div id="div_createNewShare">
+                <div class="col-sm-12">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Configurar Novo Compartilhamento</h5>
+                    </div>
+                    <div class="modal-body">
+                        <form class="form-horizontal">
+                            <div class="form-group" style="text-align: center;">
+                                <div class="btn-group sharetypeSelector" data-toggle="buttons">
+                                    <label class="btn btn-primary">
+                                        <input type="radio" name="options" class="form-control" value="1">Iniciar novo compartilhamento</input>
+                                    </label>
+                                    <label class="btn btn-primary active">
+                                        <input type="radio" name="options" class="form-control" value="2" checked>Sincronizar compartilhamento já existente</input>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="col-sm-4 control-label">Caminho da pasta:</label>
+                                <div class="col-sm-8">
+                                    <input id="folderPathSelectorInput" type="file" class="form-control-file" webkitdirectory />
+                                </div>
+                            </div>
+                            <div id="shareKeyGroup_input" class="form-group">
+                                <label class="col-sm-4 control-label">Chave do compartilhamento</label>
+                                <div class="col-sm-8">
+                                    <input type="text" class="form-control" />
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="saveShareButton" type="button" class="btn btn-primary">Salvar mudanças</button>
+                    </div>
+                </div>
+            </div>
+            <div id="div_main">
+                <!--<h2></h2>-->
+            </div>
+            <div id="div_connections">
+                <h2>Conexões</h2>
+            </div>
+            <div id="div_shares">
+                <h2>Compartilhamentos</h2>
+                <table class="table table-stripe">
+                    <thead>
+                        <tr>
+                            <td>Pasta Local</td>
+                            <td>Núm. de Compartilhamentos</td>
+                            <td>Ações</td>
+                        </tr>
+                    </thead>
+                    <tbody id="table_shares"></tbody>
+                </table>
+            </div>
+            <div id="div_transfers">
+                <h2>Transferências</h2>
+            </div>
+            <div id="div_configs">
+                <h2>Configurações</h2>
+            </div>
+            <div id="div_about">
+                <h2>Sobre</h2>
+            </div>
+            <div id="div_invitations">
+                <h2>Convites</h2>
+                <table class="table table-stripe">
+                    <thead>
+                        <tr>
+                            <td>Código do Convite</td>
+                            <td>Validade</td>
+                        </tr>
+                    </thead>
+                    <tbody id="table_invitations"></tbody>
+                </table>
+            </div>
+            <div id="div_new_invitation">
+                <h2>Novo Convite</h2>
+            </div>
+            <div id="div_show_new_invitation">
+                <h2>Novo Convite</h2>
+                <div>
+                    <canvas id='shareInvitationQRCode'></canvas>
+                </div>
+            </div>
+        </div>
+
+    </body>
+
+    <script>
+
+        const ipcRenderer = require('electron').ipcRenderer;
+
+        function callModalAddNewShare() {
+            hsDivs("#div_createNewShare");
+        }
+
+        function hsDivs(currentDiv) {
+
+            window.location.hash = currentDiv;
+
+            var divs = ["#div_main", "#div_createNewShare", "#div_connections", "#div_shares", "#div_transfers", "#div_configs", 
+                "#div_about", "#div_invitations", "#div_new_invitation", "#div_show_new_invitation"];
+
+            divs.forEach(function(entry) {
+		
+                if ( currentDiv == entry ) {
+                    $(entry).show("fast");
+                } else {
+                    $(entry).hide("fast");
+                }
+
+            });
+
+        }
+
+        $(document).ready(function () {
+
+            hsDivs("#div_main");
+
+            $(window).on("hashchange", function () {
+                hsDivs(window.location.hash);
+            });
+
+            $("#left-menu").height($(document).height());
+
+            $(window).resize(function () {
+                $("#left-menu").height($(window).height());
+            });
+
+            $(".sharetypeSelector .btn-primary input").change(function () {
+                var value = parseFloat($(this).attr("value"));
+                if ( value === 1 ) {
+                    $("#shareKeyGroup_input").hide("fast");
+                } else {
+                    $("#shareKeyGroup_input").show("fast");
+                }
+            });
+
+            $("#saveShareButton").on("click", function() {
+                var value = parseFloat($(".sharetypeSelector .btn-primary input").attr("value"));
+                if ( value === 1 ) {
+                    var folderpath = document.getElementById("folderPathSelectorInput").files[0].path;
+                    ipcRenderer.send('createNewShare', folderpath);
+                } else if ( value === 2 ) {
+
+                }
+            });
+
+            $("#table_shares").empty();
+            ipcRenderer.send('getShareList', null);
+            
+        });
+
+        function loadShareList(shareList) {
+
+            //console.log("shareList: "+JSON.stringify(shareList));
+
+            for (var i = 0; i < shareList.length; i++) {
+                $("#table_shares").append(
+                    "<tr>"+
+                        "<td style='display: none;'>"+shareList[i].hash+"</td>"+
+                        "<td>"+shareList[i].path+"</td>"+
+                        "<td>"+(shareList[i].clients.length-1)+"</td>"+
+                        "<td>"+
+                            "<a class='shareBtn' value='"+shareList[i].hash+"'><span class='glyphicons glyphicons-share-alt'></span></a>"+
+                        "</td>"+
+                    "</tr>"
+                );
+            }
+
+            $(".shareBtn").off('click', null);
+            $(".shareBtn").on('click', function () {
+                var share_hash = $(this).attr('value');
+                ipcRenderer.send('saveShareInvitation', share_hash);
+            });
+
+            $("#invitationsLink").off('click', null);
+            $("#invitationsLink").on('click', function () {
+                loadInvitationsList();
+            });
+
+        }
+
+        function loadShareInvitationScreen(data) {
+            var canvas = document.getElementById('shareInvitationQRCode');
+            hsDivs("#div_show_new_invitation");
+        }
+
+        function loadInvitationsList() {
+            ipcRenderer.send('getInvitationsList', null);
+        }
+
+        function returnLoadInvitationsList(data) {
+
+            hsDivs("#div_invitations");
+
+            console.log("returnLoadInvitationsList data ==> "+JSON.stringify(data));
+
+            $("#table_invitations").empty();
+            for (var i = 0; i < data.length; i++) {
+                $("#table_invitations").append(
+                    "<tr>"+
+                        "<td>"+data[i].share_invitation_id+"</td>"+
+                        "<td>"+data[i].timeout+"</td>"+
+                    "</tr>");
+            }
+
+        }
+
+    </script>
+
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "pearlsync_client",
+  "version": "0.1.0",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "^4.0.0"
+  },
+  "description": "Sincronization of files between two or more computers",
+  "dependencies": {
+    "electron-modal": "^1.0.0",
+    "jquery": "^3.3.1",
+    "jsdom": "^13.1.0",
+    "md5": "^2.2.1",
+    "node-machine-id": "^1.1.10",
+    "node-zip": "^1.1.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron ."
+  },
+  "author": "Paulo André Rieck",
+  "license": "MIT"
+}
