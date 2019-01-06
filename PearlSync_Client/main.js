@@ -19,8 +19,8 @@ var machineInfo = null;
 // be closed automatically when the JavaScript object is GCed.
 var mainWindow = null;
 
-const server_ip = "52.43.64.248";
-const server_default_port = 9999;
+var server_ip = "";
+var server_default_port = 0;
 
 // Quit when all windows are closed.
 app.on('window-all-closed', function() {
@@ -40,7 +40,7 @@ app.on('ready', function() {
     mainWindow.maximize();
 
     // and load the index.html of the app.
-    mainWindow.loadURL('file://' + __dirname + '/index.html');
+    mainWindow.loadURL('file://'+__dirname+'/index.html');
 
     // Open the devtools.
     mainWindow.openDevTools();
@@ -52,6 +52,10 @@ app.on('ready', function() {
         // when you should delete the corresponding element.
         mainWindow = null;
     });
+
+    var configs = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
+    server_ip = configs.server_ip;
+    server_default_port = configs.server_default_port;
 
     client['server'].connect(server_default_port, server_ip, function() {
         console.log('Connected to server');
@@ -124,7 +128,7 @@ function getLocalShareList() {
 
     var sharelist = null;
     try {
-        sharelist = JSON.parse(fs.readFileSync('local_data/shares/sharelist.json'));
+        sharelist = JSON.parse(fs.readFileSync('local_data/sharelist.json'));
     } catch (Error) {
         sharelist = [];
     }
@@ -146,7 +150,7 @@ client['server'].on('data', function(data) {
             var sharelist = getLocalShareList();
 
             sharelist.push({'hash': data.hash, 'path': data.path});
-            fs.writeFileSync('local_data/shares/sharelist.json', JSON.stringify(sharelist));
+            fs.writeFileSync('local_data/sharelist.json', JSON.stringify(sharelist));
 
             var folderStructure = dirTree(data.path);
             var folderStructureStr = JSON.stringify(folderStructure);
@@ -163,41 +167,50 @@ client['server'].on('data', function(data) {
                 console.log('local_data/shares/'+data.hash+'.json was deleted');
             });
 
+            // ----- Show refreshed shares div ----------
+            getShareList();
+
         }
 
     } else if ( data.op === 'returnGetSharePairs' ) {
 
-        var sharelist = getLocalShareList();
-
-        for (var i = 0; i < sharelist.length; i++) {
-            for (var j = 0; j < data.data.length; j++) {
-                if ( data.data[j].hash === sharelist[i].hash ) {
-                    data.data[j].path = sharelist[i].path;
-                    break;
-                }
-            }
-        }
-
-        var returndataStr = JSON.stringify(data.data);
-        console.log('returnGetSharePairs: '+returndataStr);
-        mainWindow.webContents.executeJavaScript("loadShareList("+returndataStr+");");
+        returnGetSharePairs(data);
 
     } else if ( data.op === 'returnShareInvitation' ) {
 
         //invitations_db.put({"_id": data.share_id, 'timeout': data.timeout});
         var invitation = JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8'));
-        invitation.push({"share_invitation_id": data.share_invitation_id, 'timeout': data.timeout});
+        invitation.push({"share_invitation_id": data.share_invitation_id, 'timeout': data.timeout, 'share_hash': data.share_hash});
         fs.writeFile("local_data/invitations.json", JSON.stringify(invitation), function(err) {
             if (err) {
                 return console.log(err);
             } else {
-                mainWindow.webContents.executeJavaScript("loadShareInvitationScreen("+JSON.stringify(data)+")");
+                getInvitationsList();
             }
         });
 
     }
 
 });
+
+function returnGetSharePairs(data) {
+
+    var sharelist = getLocalShareList();
+
+    for (var i = 0; i < sharelist.length; i++) {
+        for (var j = 0; j < data.data.length; j++) {
+            if ( data.data[j].hash === sharelist[i].hash ) {
+                data.data[j].path = sharelist[i].path;
+                break;
+            }
+        }
+    }
+
+    var returndataStr = JSON.stringify(data.data);
+    console.log('returnGetSharePairs: '+returndataStr);
+    mainWindow.webContents.executeJavaScript("loadShareList("+returndataStr+");");
+
+}
 
 function getShareList() {
 
@@ -208,19 +221,27 @@ function getShareList() {
 
     } else {
 
-        var queryData = JSON.parse(fs.readFileSync('local_data/shares/sharelist.json', 'utf-8'));
+        var data = JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8'));
 
         // Build the post string from an object
-        var post_data = {'op': 'getSharePairs', 'machineid': machineInfo.id, 'data': queryData};
+        var post_data = {'op': 'getSharePairs', 'machineid': machineInfo.id, 'data': data};
         client['server'].write(JSON.stringify(post_data));
 
     }
 
 }
 
-ipcMain.on('getInvitationsList', (event, variable) => {
+function getInvitationsList() {
+
     var invitations = JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8'));
-    mainWindow.webContents.executeJavaScript("returnLoadInvitationsList("+JSON.stringify(invitations)+")");
+    var shares = JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8'));
+    var retObj = {"invitations": invitations, "shares": shares};
+    mainWindow.webContents.executeJavaScript("returnLoadInvitationsList("+JSON.stringify(retObj)+")");
+
+}
+
+ipcMain.on('getInvitationsList', (event, variable) => {
+    getInvitationsList();
 });
 
 ipcMain.on('getShareList', (event, variable) => {
@@ -228,7 +249,10 @@ ipcMain.on('getShareList', (event, variable) => {
 });
 
 ipcMain.on('saveShareInvitation', (event, variable) => {
-    var id_hash = md5(machineInfo.hash+(new Date()).getTime+variable);
+    var lDate = (new Date()).getTime();
+    console.log("vars to md5 ==> machineInfo.id: "+machineInfo.id+", ldate: "+lDate+", variable: "+variable);
+    var id_hash = md5(machineInfo.id+lDate+variable);
+    console.log("new md5 hash: "+id_hash);
     client['server'].write(JSON.stringify({'op': 'saveShareInvitation', 'id': id_hash, 'share_hash': variable}));
 });
 

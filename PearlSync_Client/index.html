@@ -15,6 +15,7 @@
         <script src="client_interface/bootstrap.min.js"></script>
         <script src="client_interface/bootstrap-combobox/boostrap-combobox.js"></script>
         <script src="client_interface/require.min.js"></script>
+        <script src="client_interface/dateFormat.js"></script>
 
         <!-- Insert this line after script imports -->
         <script>if (window.module) module = window.module;</script>
@@ -59,8 +60,8 @@
                 <li><a href="#div_main">Painel</a></li>
                 <li><a href="#div_connections">Conexões</a></li>
                 <li><a href="#div_shares">Compartilhamentos</a></li>
-                <li><a id="invitationsLink">Convites</a></li>
-                <li><a href="#div_createNewShare">Novo Compartilhamento</a></li>
+                <li><a id="invitationsLink">Convites Ativos</a></li>
+                <!--<li><a href="#div_createNewShare">Novo Compartilhamento</a></li>-->
                 <li><a href="#div_transfers">Transferências</a></li>
                 <li><a href="#div_configs">Configurações</a></li>
                 <li><a href="#div_about">Sobre</a></li>
@@ -116,6 +117,11 @@
             </div>
             <div id="div_shares">
                 <h2>Compartilhamentos</h2>
+                <div class='col-sm-12'>
+                    <a href="#div_createNewShare">
+                        <button type="button" class="btn btn-primary">Novo Compartilhamento</button>
+                    </a>
+                </div>
                 <table class="table table-stripe">
                     <thead>
                         <tr>
@@ -142,6 +148,7 @@
                     <thead>
                         <tr>
                             <td>Código do Convite</td>
+                            <td>Pasta Local</td>
                             <td>Validade</td>
                         </tr>
                     </thead>
@@ -216,20 +223,24 @@
                 if ( value === 1 ) {
                     var folderpath = document.getElementById("folderPathSelectorInput").files[0].path;
                     ipcRenderer.send('createNewShare', folderpath);
+                    hsDivs("#div_shares")
                 } else if ( value === 2 ) {
 
                 }
             });
 
-            $("#table_shares").empty();
             ipcRenderer.send('getShareList', null);
+
+            $("#invitationsLink").off('click', null);
+            $("#invitationsLink").on('click', function () {
+                loadInvitationsList();
+            });
             
         });
 
         function loadShareList(shareList) {
 
-            //console.log("shareList: "+JSON.stringify(shareList));
-
+            $("#table_shares").empty();
             for (var i = 0; i < shareList.length; i++) {
                 $("#table_shares").append(
                     "<tr>"+
@@ -249,17 +260,12 @@
                 ipcRenderer.send('saveShareInvitation', share_hash);
             });
 
-            $("#invitationsLink").off('click', null);
-            $("#invitationsLink").on('click', function () {
-                loadInvitationsList();
-            });
-
         }
 
-        function loadShareInvitationScreen(data) {
+        /*function loadShareInvitationScreen(data) {
             var canvas = document.getElementById('shareInvitationQRCode');
             hsDivs("#div_show_new_invitation");
-        }
+        }*/
 
         function loadInvitationsList() {
             ipcRenderer.send('getInvitationsList', null);
@@ -267,16 +273,28 @@
 
         function returnLoadInvitationsList(data) {
 
+            var invitations = data.invitations;
+            var shares = data.shares;
+
             hsDivs("#div_invitations");
 
-            console.log("returnLoadInvitationsList data ==> "+JSON.stringify(data));
-
             $("#table_invitations").empty();
-            for (var i = 0; i < data.length; i++) {
+            for (var i = 0; i < invitations.length; i++) {
+
+                var localPath = "";
+                var share_hash = invitations[i].share_hash;
+                for (var j = 0; shares.length; j++) {
+                    if ( share_hash === shares[j].hash ) {
+                        localPath = shares[j].path;
+                        break;
+                    }
+                }
+
                 $("#table_invitations").append(
                     "<tr>"+
-                        "<td>"+data[i].share_invitation_id+"</td>"+
-                        "<td>"+data[i].timeout+"</td>"+
+                        "<td>"+invitations[i].share_invitation_id+" <span class='glyphicons glyphicons-copy'></span> <span class='glyphicons glyphicons-qrcode'></span></td>"+
+                        "<td>"+localPath+"</td>"+
+                        "<td>"+(new Date(invitations[i].timeout+(24*60*60*1000))).format("dd/mm/yyyy HH:MM")+"</td>"+
                     "</tr>");
             }
 
