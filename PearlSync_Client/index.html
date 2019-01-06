@@ -16,6 +16,7 @@
         <script src="client_interface/bootstrap-combobox/boostrap-combobox.js"></script>
         <script src="client_interface/require.min.js"></script>
         <script src="client_interface/dateFormat.js"></script>
+        <script src="client_interface/qrcodejs/qrcode.min.js"></script>
 
         <!-- Insert this line after script imports -->
         <script>if (window.module) module = window.module;</script>
@@ -61,7 +62,6 @@
                 <li><a href="#div_connections">Conexões</a></li>
                 <li><a href="#div_shares">Compartilhamentos</a></li>
                 <li><a id="invitationsLink">Convites Ativos</a></li>
-                <!--<li><a href="#div_createNewShare">Novo Compartilhamento</a></li>-->
                 <li><a href="#div_transfers">Transferências</a></li>
                 <li><a href="#div_configs">Configurações</a></li>
                 <li><a href="#div_about">Sobre</a></li>
@@ -161,7 +161,7 @@
             <div id="div_show_new_invitation">
                 <h2>Novo Convite</h2>
                 <div>
-                    <canvas id='shareInvitationQRCode'></canvas>
+                    <div id='shareInvitationQRCode'></div>
                 </div>
             </div>
         </div>
@@ -262,11 +262,6 @@
 
         }
 
-        /*function loadShareInvitationScreen(data) {
-            var canvas = document.getElementById('shareInvitationQRCode');
-            hsDivs("#div_show_new_invitation");
-        }*/
-
         function loadInvitationsList() {
             ipcRenderer.send('getInvitationsList', null);
         }
@@ -292,11 +287,48 @@
 
                 $("#table_invitations").append(
                     "<tr>"+
-                        "<td>"+invitations[i].share_invitation_id+" <span class='glyphicons glyphicons-copy'></span> <span class='glyphicons glyphicons-qrcode'></span></td>"+
+                        "<td>"+
+                            invitations[i].share_invitation_id+" "+
+                            "<a class='shareActionBt shareActionBt_copy' value='"+invitations[i].share_invitation_id+"'><span class='glyphicons glyphicons-copy'></span></a> "+
+                            "<a class='shareActionBt shareActionBt_qrcode' value='"+invitations[i].share_invitation_id+"'><span class='glyphicons glyphicons-qrcode'></span></a> "+
+                            "<a class='shareActionBt shareActionBt_mail' value='"+invitations[i].share_invitation_id+"'><span class='glyphicons glyphicons-message-plus'></span></a></td>"+
                         "<td>"+localPath+"</td>"+
                         "<td>"+(new Date(invitations[i].timeout+(24*60*60*1000))).format("dd/mm/yyyy HH:MM")+"</td>"+
                     "</tr>");
+
             }
+
+            $(".shareActionBt").off("click", null);
+            $(".shareActionBt").on("click", function (event) {
+
+                var value = $(this).attr("value");
+                if ( $(this).hasClass("shareActionBt_copy") ) {
+
+                    navigator.clipboard.writeText(value).then(function() {
+                        console.log('Async: Copying to clipboard was successful!');
+                    }, function(err) {
+                        console.error('Async: Could not copy text: ', err);
+                    });
+
+                } else if ( $(this).hasClass("shareActionBt_qrcode") ) {
+
+                    hsDivs("#div_show_new_invitation");
+                    var qrcode = new QRCode(document.getElementById("shareInvitationQRCode"), {
+                        text: value,
+                        width: 256,
+                        height: 256,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+
+                } else if ( $(this).hasClass("shareActionBt_mail") ) {
+
+                    window.open('mailto:?subject=Convite de Compartilhamento de Arquivos PearlSync&body=Você foi convidado a sincronizar arquivos com outra conta do PearSync. Atenção! Apenas aceite o compartilhamento caso você conheça o remetente desta mensagem e caso a solicitação de compartilhamento faça sentido.\nCódigo de inclusão para o novo compartilhamento: '+value);
+
+                } 
+
+            });
 
         }
 
