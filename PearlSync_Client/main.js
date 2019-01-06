@@ -126,6 +126,8 @@ ipcMain.on('createNewShare', (event, path) => {
 
 function getLocalShareList() {
 
+    createFileIfNotExists('local_data/sharelist.json', '[]');
+
     var sharelist = null;
     try {
         sharelist = JSON.parse(fs.readFileSync('local_data/sharelist.json'));
@@ -145,6 +147,8 @@ client['server'].on('data', function(data) {
     if ( data.op === 'returnSaveNewShare' ) {
 
         if ( data.result === 'success' ) {
+
+            createFileIfNotExists('local_data/sharelist.json', '[]');
 
             // ------- Register new share on local share list --------------
             var sharelist = getLocalShareList();
@@ -178,7 +182,8 @@ client['server'].on('data', function(data) {
 
     } else if ( data.op === 'returnShareInvitation' ) {
 
-        //invitations_db.put({"_id": data.share_id, 'timeout': data.timeout});
+        createFileIfNotExists('local_data/invitations.json', '[]');
+
         var invitation = JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8'));
         invitation.push({"share_invitation_id": data.share_invitation_id, 'timeout': data.timeout, 'share_hash': data.share_hash});
         fs.writeFile("local_data/invitations.json", JSON.stringify(invitation), function(err) {
@@ -192,6 +197,18 @@ client['server'].on('data', function(data) {
     }
 
 });
+
+function createFileIfNotExists(path, content) {
+
+    if ( fs.existsSync(path) ) {
+        fs.writeFile(path, content, (err) => {
+            if (err) {
+                throw err;
+            }
+        }); 
+    }
+
+}
 
 function returnGetSharePairs(data) {
 
@@ -221,6 +238,8 @@ function getShareList() {
 
     } else {
 
+        createFileIfNotExists('local_data/sharelist.json', '[]');
+
         var data = JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8'));
 
         // Build the post string from an object
@@ -232,6 +251,9 @@ function getShareList() {
 }
 
 function getInvitationsList() {
+
+    createFileIfNotExists('local_data/invitations.json', '[]');
+    createFileIfNotExists('local_data/sharelist.json', '[]');
 
     var invitations = JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8'));
     var shares = JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8'));
@@ -249,10 +271,7 @@ ipcMain.on('getShareList', (event, variable) => {
 });
 
 ipcMain.on('saveShareInvitation', (event, variable) => {
-    var lDate = (new Date()).getTime();
-    console.log("vars to md5 ==> machineInfo.id: "+machineInfo.id+", ldate: "+lDate+", variable: "+variable);
-    var id_hash = md5(machineInfo.id+lDate+variable);
-    console.log("new md5 hash: "+id_hash);
+    var id_hash = md5(machineInfo.id+(new Date()).getTime()+variable);
     client['server'].write(JSON.stringify({'op': 'saveShareInvitation', 'id': id_hash, 'share_hash': variable}));
 });
 
