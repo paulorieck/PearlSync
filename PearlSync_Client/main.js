@@ -200,7 +200,7 @@ client['server'].on('data', function(data) {
 
 function createFileIfNotExists(path, content) {
 
-    if ( fs.existsSync(path) ) {
+    if ( !fs.existsSync(path) ) {
         fs.writeFile(path, content, (err) => {
             if (err) {
                 throw err;
