@@ -52,6 +52,9 @@ function Connects (address) {
 		details[id] = {};
 		details[id].remoteAddress = socket[address].remoteAddress;
 		details[id].remotePort = socket[address].remotePort;
+		details[id].pingtime = (new Date()).getTime();
+		details[id].hostname = data.hostname;
+		details[id].machineid = id;
 
 		if ( data.op === 'postNewShare' ) {
 			
@@ -101,13 +104,27 @@ function Connects (address) {
 			invitations_db.put({'_id': data.id, 'share_hash': data.share_hash, 'timeout': timeout});
 			socket[address].write(JSON.stringify({'op': 'returnShareInvitation', 'share_invitation_id': data.id, 'timeout': timeout, 'share_hash': data.share_hash}));
 
+		} else if ( data.op === 'getPunchConfigFromIP' ) {
+
+			var ip = data.ip;
+			var port = data.port;
+
+			var machineid = "";
+			var hostname = "";
+			var pingtime = 0;
+			for (var i = 0; i < details.length; i++) {
+				if ( details[i].ip === ip && details[i].port === port ) {
+					machineid = details[i].machineid;
+					hostname = details[i].hostname;
+					pingtime = details[i].pingtime;
+					type = data.type;
+					break;
+				}
+			}
+
+			socket[address].write(JSON.stringify({'op': 'returnGetPunchConfigFromIP', 'hostname': hostname, 'machineid': machineid, 'pingtime': pingtime, 'type': type, 'ip': ip, 'port': port}));
+
 		}
-
-        /*console.log('> (S->A) sending B\'s details:', detailsB);
-		socketA.write(JSON.stringify(detailsB));
-
-		console.log('> (S->B) sending A\'s details:', detailsA);
-		socketB.write(JSON.stringify(detailsA));*/
 
     });
 

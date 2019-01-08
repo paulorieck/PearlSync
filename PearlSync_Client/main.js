@@ -12,6 +12,53 @@ var connectionsConfs = [];
 var client = [];
 client['server'] = new net.Socket();
 
+var socket = [];
+var server = net.createServer(function (socket_) {
+    
+    var address = socket_.address().remoteAddress+":"+socket_.address().remotePort;
+    console.log("Stablishing connection with "+address+"\n");
+    
+    // This IP and port belong to whom?
+    client['server'].write(JSON.stringify({
+        'op': 'getPunchConfigFromIP', 
+        'machineid': machineInfo.id, 
+        'ip': socket_.address().remoteAddress, 
+        'port': socket_.address().remotePort, 
+        'hostname': machineInfo.hostname,
+        'type': 'server'}));
+
+	socket[address] = socket_;
+    Connects(address);
+    
+});
+
+function Connects (address) {
+
+	socket[address].on('data', function (data) {
+
+		console.log("received data => "+data+"\n");
+
+        data = JSON.parse(data);
+
+    });
+
+	socket[address].on('end', function () {
+	    console.log('> ('+socket[address].address.ip+':'+socket[address].address.port+') connection closed.\n');
+	    socket[address] = null;
+	});
+
+	socket[address].on('error', function (err) {
+	    console.log('> ('+socket[address].address.ip+':'+socket[address].address.port+') connection closed with err (',err,').\n');
+	    socket[address] = null;
+    });
+    
+}
+
+server.listen(9999, function (err) {
+	if(err) return console.log(err+"\n");
+	console.log('server listening on', server.address().address + ':' + server.address().port+"\n");
+});
+
 const {app, BrowserWindow, ipcMain, dialog} = require('electron');
 
 dialog.showErrorBox = function(title, content) {
@@ -380,7 +427,7 @@ ipcMain.on('importNewShare', (event, data) => {
     var data = JSON.parse(data);
 
     // ------- Register new share on server share list --------------
-    client['server'].write(JSON.stringify({'op': 'importNewShare','invitation_hash': data.invitation_hash, 'machineid': machineInfo.id, "hostname": machineInfo.hostname, "path": data.folderpath}));
+    client['server'].write(JSON.stringify({'op': 'importNewShare', 'machineid': machineInfo.id,'invitation_hash': data.invitation_hash, 'machineid': machineInfo.id, "hostname": machineInfo.hostname, "path": data.folderpath, 'hostname': machineInfo.hostname}));
 
 });
 
@@ -440,6 +487,18 @@ client['server'].on('data', function(data) {
                 getInvitationsList();
             }
         });
+
+    } else if ( data.op === 'returnGetPunchConfigFromIP' ) {
+
+        for (var i = 0; i < connectionsConfs.length; i++) {
+            if ( connectionsConfs[i].machineid === data.machineid ) {
+                connectionsConfs[i].pingtime = data.pingtime;
+                connectionsConfs[i].ip = data.ip;
+                connectionsConfs[i].port = data.port; 
+                mainWindow.webContents.executeJavaScript("loadConnectionsList("+JSON.stringify(connectionsConfs)+");");
+                break;
+            }
+        }
 
     }
 
@@ -507,7 +566,7 @@ function returnGetSharePairs(data) {
                             }
                         }
                         if ( !connection_exists ) {
-                            connectionsConfs.push({"machineid": clients_from_share[k].machineid, "hostname": clients_from_share[k].hostname});
+                            connectionsConfs.push({"machineid": clients_from_share[k].machineid, "hostname": clients_from_share[k].hostname, "type": "client"});
                         }
                     }
                 }
@@ -516,9 +575,7 @@ function returnGetSharePairs(data) {
 
             }
 
-            var returndataStr = JSON.stringify(data.data);
-            //console.log('returnGetSharePairs: '+returndataStr);
-            mainWindow.webContents.executeJavaScript("loadShareList("+returndataStr+");");
+            mainWindow.webContents.executeJavaScript("loadShareList("+JSON.stringify(data.data)+");");
 
         }
 
@@ -550,7 +607,7 @@ function getShareList() {
 
 function executeGetShareList(id, data) {
 
-    var post_data = {'op': 'getSharePairs', 'machineid': id, 'data': data};
+    var post_data = {'op': 'getSharePairs', 'data': data, 'machineid': machineInfo.id, 'hostname': machineInfo.hostname};
     if ( client['server'].readyState !== "closed" ) {
         client['server'].write(JSON.stringify(post_data));
     } else {
@@ -583,7 +640,7 @@ ipcMain.on('getShareList', (event, variable) => {
 
 ipcMain.on('saveShareInvitation', (event, variable) => {
     var id_hash = md5(machineInfo.id+(new Date()).getTime()+variable);
-    client['server'].write(JSON.stringify({'op': 'saveShareInvitation', 'id': id_hash, 'share_hash': variable}));
+    client['server'].write(JSON.stringify({'op': 'saveShareInvitation', 'id': id_hash, 'share_hash': variable, 'machineid': machineInfo.id, 'hostname': machineInfo.hostname}));
 });
 
 function dirTree(filename) {
