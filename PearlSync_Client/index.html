@@ -99,7 +99,7 @@
                             <div id="shareKeyGroup_input" class="form-group">
                                 <label class="col-sm-4 control-label">Chave do compartilhamento</label>
                                 <div class="col-sm-8">
-                                    <input type="text" class="form-control" />
+                                    <input type="text" class="form-control" id="invitationHashInput" />
                                 </div>
                             </div>
                         </form>
@@ -114,6 +114,15 @@
             </div>
             <div id="div_connections">
                 <h2>Conexões</h2>
+                <table class="table table-stripe">
+                    <thead>
+                        <tr>
+                            <td>Hostname</td>
+                            <td>Status</td>
+                        </tr>
+                    </thead>
+                    <tbody id="table_connections"></tbody>
+                </table>
             </div>
             <div id="div_shares">
                 <h2>Compartilhamentos</h2>
@@ -220,12 +229,13 @@
 
             $("#saveShareButton").on("click", function() {
                 var value = parseFloat($(".sharetypeSelector .btn-primary input").attr("value"));
+                var folderpath = document.getElementById("folderPathSelectorInput").files[0].path;
                 if ( value === 1 ) {
-                    var folderpath = document.getElementById("folderPathSelectorInput").files[0].path;
                     ipcRenderer.send('createNewShare', folderpath);
                     hsDivs("#div_shares")
                 } else if ( value === 2 ) {
-
+                    var data = {"folderpath":folderpath,"invitation_hash":$("#invitationHashInput").val()}
+                    ipcRenderer.send('importNewShare', JSON.stringify(data));
                 }
             });
 
@@ -237,6 +247,22 @@
             });
             
         });
+
+        function loadConnectionsList(connectionsList) {
+
+            $("#table_connections").empty();
+            for (var i = 0; i < connectionsList.length; i++) {
+                $("#table_connections").append(
+                    "<tr>"+
+                        "<td style='display: none;'>"+table_connections[i].machineid+"</td>"+
+                        "<td>"+table_connections[i].hostname+"</td>"+
+                        "<td>"+
+                        "</td>"+
+                    "</tr>"
+                );
+            }
+
+        }
 
         function loadShareList(shareList) {
 

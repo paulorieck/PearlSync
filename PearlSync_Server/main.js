@@ -58,6 +58,17 @@ function Connects (address) {
 			shares_db.put({"_id": data.hash, clients: [{"machineid": data.machineid, "hostname": data.hostname}]});
 			socket[address].write(JSON.stringify({'op': 'returnSaveNewShare', 'result': 'success', 'hash': data.hash, 'path': data.path}));
 
+		} else if ( data.op === 'importNewShare' ) {
+
+			invitations_db.get(data.invitation_hash).then(function (doc1) {
+				shares_db.get(doc1.share_hash).then(function (doc2) {
+					var tempClients = doc2.clients;
+					tempClients.push({"machineid": data.machineid, "hostname": data.hostname});
+					shares_db.put({"_rev": doc2._rev, "clients": tempClients});
+					socket[address].write(JSON.stringify({'op': 'returnSaveNewShare', 'result': 'success', 'hash': doc2._id, 'path': data.path}));
+				});
+			});
+
 		} else if ( data.op === 'getSharePairs' ) {
 
 			var counter = 0;
