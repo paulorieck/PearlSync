@@ -228,7 +228,8 @@
             });
 
             $("#saveShareButton").on("click", function() {
-                var value = parseFloat($(".sharetypeSelector .btn-primary input").attr("value"));
+                var value = parseFloat($(".sharetypeSelector .active input").attr("value"));
+                console.log("saveShareButton ==> value: "+value);
                 var folderpath = document.getElementById("folderPathSelectorInput").files[0].path;
                 if ( value === 1 ) {
                     ipcRenderer.send('createNewShare', folderpath);
@@ -254,8 +255,8 @@
             for (var i = 0; i < connectionsList.length; i++) {
                 $("#table_connections").append(
                     "<tr>"+
-                        "<td style='display: none;'>"+table_connections[i].machineid+"</td>"+
-                        "<td>"+table_connections[i].hostname+"</td>"+
+                        "<td style='display: none;'>"+connectionsList[i].machineid+"</td>"+
+                        "<td>"+connectionsList[i].hostname+"</td>"+
                         "<td>"+
                         "</td>"+
                     "</tr>"

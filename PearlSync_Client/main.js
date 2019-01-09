@@ -6,6 +6,52 @@ const unzip = new require('unzip');
 const os = require('os');
 const net = require('net');
 const watch = require('node-watch');
+const node_machine_id = require('node-machine-id');
+
+var machineInfo = null;
+
+function processArgs(args) {
+
+    var server_ip = "";
+    var server_port = 0;
+
+    var changedConfigJSON = false;
+
+    args = args.split(',');
+
+    for (var i = 0; i < args.length; i++) {
+
+        if ( args[i].indexOf('factory_reset=true') != -1 ) {
+            var files = ['local_data/instructions.json', 'local_data/invitations.json', 'local_data/machine.json', 'local_data/sharelist.json'];
+            for (var j = 0; j < files.length; j++) {
+                fs.unlinkSync(files[j]);
+                createFileIfNotExists(files[j], "[]");
+            }
+            cleanDirectory('local_data/shares/');
+        } else if ( args[i].indexOf('server_ip=') != -1 ) {
+            changedConfigJSON = true;
+            server_ip = args[i].substring(args[i].indexOf("=")+1, args[i].length);
+        } else if ( args[i].indexOf('server_port=') != -1 ) {
+            changedConfigJSON = true;
+            server_port = parseFloat(args[i].substring(args[i].indexOf("=")+1, args[i].length));
+        }
+
+    }
+
+    if ( changedConfigJSON ) {
+
+        createFileIfNotExists('config.json', "{}");
+        var configs = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
+
+        configs.server_ip = server_ip;
+        configs.server_default_port = server_port;
+
+        fs.writeFileSync('config.json', JSON.stringify(configs));
+
+    }
+
+}
+processArgs(process.argv+'');
 
 var connectionsConfs = [];
 
@@ -55,7 +101,9 @@ function Connects (address) {
 }
 
 server.listen(9999, function (err) {
-	if(err) return console.log(err+"\n");
+	if (err) {
+        return console.log(err+"\n");
+    }
 	console.log('server listening on', server.address().address + ':' + server.address().port+"\n");
 });
 
@@ -65,7 +113,7 @@ dialog.showErrorBox = function(title, content) {
     console.log(`${title}\n${content}`);
 };
 
-var machineInfo = null;
+
 
 var watcher = [];
 var instructionsBeingProcessed = false;
@@ -257,7 +305,7 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
         }
 
         var type = "";
-        if ( fs.lstatSync(path_string).isDirectory() ) {
+        if ( fs.lstatSync(name).isDirectory() ) {
             type = "folder";
         } else {
             type = "file";
@@ -372,11 +420,17 @@ function checkForMachineId() {
         
         machineInfo = JSON.parse(fs.readFileSync(machinIdFilePath, 'utf-8'));
         console.group("Readed machine id: "+machineInfo.id);
-        checkForConfiguredShares();
+
+        if ( typeof machineInfo.id === 'undefined' ) {
+            //console.log("No machine id found (2)");
+            createNewMachineId();
+        } else {
+            checkForConfiguredShares();
+        }
 
     } else {
 
-        console.log("No machine id found");
+        console.log("No machine id found (1)");
         createNewMachineId();
         
     }
@@ -385,27 +439,19 @@ function checkForMachineId() {
 
 function createNewMachineId() {
 
-    console.log("Creating a new one");
-    var machineId = require('node-machine-id').machineIdSync;
-    var hostname = os.hostname();
-    console.log(machineId);
+    //console.log("Creating a new one");
+    machineInfo = {"id": node_machine_id.machineIdSync(), "hostname": os.hostname()};
+    //console.log("machineInfo.id: "+machineInfo.id);
 
-    machineInfo = {"id": machineId, "hostname": hostname};
-
-    fs.writeFile("local_data/machine.json", JSON.stringify(machineInfo), function(err) {
-        if (err) {
-            return console.log(err);
-        } else {
-            checkForConfiguredShares();
-        }
-    });
+    fs.writeFileSync("local_data/machine.json", JSON.stringify(machineInfo));
+    checkForConfiguredShares();
 
 }
 
 function checkForConfiguredShares() {
     fs.readdir('local_data/shares/', (err, local_shares_files) => {
         if ( local_shares_files.length == 0 ) {
-            console.log("No pair found");
+            //console.log("No pair found");
             mainWindow.webContents.executeJavaScript("callModalAddNewShare();");
         }
     });
@@ -415,7 +461,6 @@ ipcMain.on('createNewShare', (event, path) => {
     
     var now = new Date().getTime;
     var hash = md5(path+now);
-    console.log("createNewShare ==> hash: "+hash);
 
     // ------- Register new share on server share list --------------
     client['server'].write(JSON.stringify({'op': 'postNewShare','hash': hash, 'machineid': machineInfo.id, 'hostname': machineInfo.hostname, 'path': path}));
@@ -528,15 +573,9 @@ function processFolderStructure(path, hash) {
 }
 
 function createFileIfNotExists(path, content) {
-
     if ( !fs.existsSync(path) ) {
-        fs.writeFile(path, content, (err) => {
-            if (err) {
-                throw err;
-            }
-        }); 
+        fs.writeFileSync(path, content);
     }
-
 }
 
 function returnGetSharePairs(data) {
@@ -575,12 +614,11 @@ function returnGetSharePairs(data) {
 
             }
 
-            mainWindow.webContents.executeJavaScript("loadShareList("+JSON.stringify(data.data)+");");
-
         }
 
     }
 
+    mainWindow.webContents.executeJavaScript("loadShareList("+JSON.stringify(data.data)+");");
     mainWindow.webContents.executeJavaScript("loadConnectionsList("+JSON.stringify(connectionsConfs)+");");
     
 }
@@ -673,5 +711,25 @@ function sendInstructionsToPairs(instructions) {
 
 
     }
+
+}
+
+function cleanDirectory(directory) {
+
+    fs.readdir(directory, (err, files) => {
+
+        if (err) {
+            throw err;
+        }
+
+        for (const file of files) {
+            fs.unlink(path.join(directory, file), err => {
+                if (err) {
+                    throw err;
+                }
+            });
+        }
+
+    });
 
 }
