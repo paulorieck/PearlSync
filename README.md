@@ -14,8 +14,9 @@ Instruções de uso:
 1 - Faça o download do pacote;
 2 - Instale um servidor acessível por IP público;
  2.1 - Transfira o conteúdo de PearlSync_Server para este servidor;
- 2.2 - Execute o arquivo pearl_sync_server.js (node pearl_sync_server.js, ou, pm2 pearl_sync_server.js)
- 2.3 - O sistema por enquanto escuta na porta 9999;
+ 2.2 - Execute de dentro desta pasta o comando "npm install" para que as dependências corretas sejam instaladas para o seu sistema operacional;
+ 2.3 - Execute o arquivo pearl_sync_server.js (node pearl_sync_server.js, ou, pm2 pearl_sync_server.js)
+ 2.4 - O sistema por enquanto escuta na porta 9999;
 3 - Instale um cliente;
  3.1 - Faça a transferência de PearSync_Client para a pasta desejada;
  3.2 - Execute de dentro desta pasta o comando "npm install" para que as dependências corretas sejam instaladas para o seu sistema operacional;
