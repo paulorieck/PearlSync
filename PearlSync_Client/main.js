@@ -9,6 +9,7 @@ const watch = require('node-watch');
 const node_machine_id = require('node-machine-id');
 
 var machineInfo = null;
+var debug_browser = false;
 
 function processArgs(args) {
 
@@ -34,6 +35,8 @@ function processArgs(args) {
         } else if ( args[i].indexOf('server_port=') != -1 ) {
             changedConfigJSON = true;
             server_port = parseFloat(args[i].substring(args[i].indexOf("=")+1, args[i].length));
+        } else if ( args[i].indexOf('debug_browser=true') != -1 ) {
+            debug_browser = true;
         }
 
     }
@@ -148,9 +151,11 @@ app.on('ready', function() {
     // and load the index.html of the app.
     mainWindow.loadURL('file://'+__dirname+'/index.html');
 
-    // Open the devtools.
-    mainWindow.openDevTools();
-
+    if ( debug_browser ) {
+        // Open the devtools.
+        mainWindow.openDevTools();
+    }
+    
     // Emitted when the window is closed.
     mainWindow.on('closed', function() {
         // Dereference the window object, usually you would store windows
