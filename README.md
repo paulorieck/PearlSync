@@ -13,16 +13,16 @@ SEJA BEM VINDO! SE VOCÊ TEM ALGUM CONHECIMENTO EM HTML, CSS, JAVASCRIT, NODE JS
 Instruções de uso:
 1. Faça o download do pacote;
 1. Instale um servidor acessível por IP público;
- 1. Transfira o conteúdo de PearlSync_Server para este servidor;
- 1. Execute de dentro desta pasta o comando "npm install" para que as dependências corretas sejam instaladas para o seu sistema operacional;
- 1. Execute o arquivo pearl_sync_server.js (node pearl_sync_server.js, ou, pm2 pearl_sync_server.js)
- 1. O sistema por enquanto escuta na porta 9999;
+    1. Transfira o conteúdo de PearlSync_Server para este servidor;
+    1. Execute de dentro desta pasta o comando "npm install" para que as dependências corretas sejam instaladas para o seu sistema operacional;
+    1. Execute o arquivo pearl_sync_server.js (node pearl_sync_server.js, ou, pm2 pearl_sync_server.js)
+    1. O sistema por enquanto escuta na porta 9999;
 1. Instale um cliente;
- 1. Faça a transferência de PearSync_Client para a pasta desejada;
- 1. Execute de dentro desta pasta o comando "npm install" para que as dependências corretas sejam instaladas para o seu sistema operacional;
- 1. Crie um arquivo de configuração de nome "config.json" conforme modelo apresentado abaixo dentro da pasta PearSync_Client;
- 1. OU Execute o comando conforme a seguir para a primeira configuração: "./node_modules/.bin/electron main.js server_ip=XX.XX.XX.XX server_port=9999 factory_reset=true"
- 1. Para as próximas execuções basta executar "npm start"
+    1. Faça a transferência de PearSync_Client para a pasta desejada;
+    1. Execute de dentro desta pasta o comando "npm install" para que as dependências corretas sejam instaladas para o seu sistema operacional;
+    1. Crie um arquivo de configuração de nome "config.json" conforme modelo apresentado abaixo dentro da pasta PearSync_Client;
+    1. OU Execute o comando conforme a seguir para a primeira configuração: "./node_modules/.bin/electron main.js server_ip=XX.XX.XX.XX server_port=9999 factory_reset=true"
+    1. Para as próximas execuções basta executar "npm start"
  
 MODELO DE CONTEÚDO DO ARQUIVO config.json
 {"server_ip":"XX.XX.XX.XX","server_default_port":9999}
