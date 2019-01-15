@@ -251,6 +251,9 @@
 
         function loadConnectionsList(connectionsList) {
 
+            console.log("connectionsList");
+            console.log(connectionsList);
+
             $("#table_connections").empty();
             for (var i = 0; i < connectionsList.length; i++) {
                 $("#table_connections").append(

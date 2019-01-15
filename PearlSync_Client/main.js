@@ -11,6 +11,8 @@ const node_machine_id = require('node-machine-id');
 var machineInfo = null;
 var debug_browser = false;
 
+var punch_time = 0;
+
 function processArgs(args) {
 
     var server_ip = "";
@@ -64,20 +66,11 @@ client['server'] = new net.Socket();
 var socket = [];
 var server = net.createServer(function (socket_) {
     
-    var address = socket_.address().remoteAddress+":"+socket_.address().remotePort;
-    console.log("Stablishing connection with "+address+"\n");
-    
-    // This IP and port belong to whom?
-    client['server'].write(JSON.stringify({
-        'op': 'getPunchConfigFromIP', 
-        'machineid': machineInfo.id, 
-        'ip': socket_.address().remoteAddress, 
-        'port': socket_.address().remotePort, 
-        'hostname': machineInfo.hostname,
-        'type': 'server'}));
+    var remote_address = socket_.remoteAddress.replace("::ffff:", "")+":"+socket_.remotePort;
+    console.log("Stablishing connection with "+remote_address+"\n");
 
-	socket[address] = socket_;
-    Connects(address);
+	socket[remote_address] = socket_;
+    Connects(remote_address);
     
 });
 
@@ -89,15 +82,43 @@ function Connects (address) {
 
         data = JSON.parse(data);
 
+        var confExists = false;
+        var i = 0;
+        for (i = 0; i < connectionsConfs.length; i++) {
+            if ( connectionsConfs[i].machineid === data.data.machineid ) {
+                confExists = true;
+                break;
+            }
+        }
+
+        if ( !confExists ) {
+            socket[address] = null;
+        } else {
+
+            if ( data.op === 'handShake' ) {
+
+                connectionsConfs[i].machineid = data.data.machineid;
+                connectionsConfs[i].ip = socket[address].remoteAddress;
+                connectionsConfs[i].port = socket[address].remotePort;
+                connectionsConfs[i].type = "server";
+                connectionsConfs[i].pingtime = (new Date()).getTime();
+                connectionsConfs[i].status = "connected";
+
+                mainWindow.webContents.executeJavaScript("loadConnectionsList("+JSON.stringify(connectionsConfs)+");");
+            
+            }
+
+        }
+
     });
 
 	socket[address].on('end', function () {
-	    console.log('> ('+socket[address].address.ip+':'+socket[address].address.port+') connection closed.\n');
+	    console.log('> ('+socket[address].remoteAddress+':'+socket[address].remotePort+') connection closed.\n');
 	    socket[address] = null;
 	});
 
 	socket[address].on('error', function (err) {
-	    console.log('> ('+socket[address].address.ip+':'+socket[address].address.port+') connection closed with err (',err,').\n');
+	    console.log('> ('+socket[address].remoteAddress+':'+socket[address].remotePort+') connection closed with err (',err,').\n');
 	    socket[address] = null;
     });
     
@@ -115,8 +136,6 @@ const {app, BrowserWindow, ipcMain, dialog} = require('electron');
 dialog.showErrorBox = function(title, content) {
     console.log(`${title}\n${content}`);
 };
-
-
 
 var watcher = [];
 var instructionsBeingProcessed = false;
@@ -169,7 +188,9 @@ app.on('ready', function() {
     server_default_port = configs.server_default_port;
 
     client['server'].connect(server_default_port, server_ip, function() {
-        console.log('Connected to server');
+
+        console.log('Connected to server '+server_ip+":"+server_default_port);
+
     });    
 
     client['server'].on('end', function () {
@@ -177,7 +198,7 @@ app.on('ready', function() {
         client['server'] = new net.Socket();
         var reconnection = setInterval(function () {
             client['server'].connect(server_default_port, server_ip, function() {
-                console.log('Connected to server');
+                console.log('Connected to server '+server_ip+":"+server_default_port);
                 clearInterval(reconnection);
             });
         }, 10000);
@@ -189,7 +210,7 @@ app.on('ready', function() {
         client['server'] = new net.Socket();
         var reconnection = setInterval(function () {
             client['server'].connect(server_default_port, server_ip, function() {
-                console.log('Connected to server');
+                console.log('Connected to server '+server_ip+":"+server_default_port);
                 clearInterval(reconnection);
             });
         }, 10000);
@@ -215,12 +236,6 @@ app.on('ready', function() {
 });
 
 //-------------------------------------------------------------------
-
-function getUpdatedConnectionsListFromShare(share_hash) {
-
-    
-
-}
 
 function startSharesProcessing() {
 
@@ -268,9 +283,6 @@ function startSharesProcessing() {
                 .pipe(unzip.Extract({path:'local_data/shares/'}).on('close', function () {
                     sharesProcessingContinuation(oldest_filename, sharelist_obj);
                 }));
-
-            // Get connections list from share
-            getUpdatedConnectionsListFromShare("share_list[i].hash");
 
         }
 
@@ -430,7 +442,23 @@ function checkForMachineId() {
             //console.log("No machine id found (2)");
             createNewMachineId();
         } else {
+
+            var interfaces = os.networkInterfaces();
+            var addresses = [];
+            for (var k in interfaces) {
+                for (var k2 in interfaces[k]) {
+                    var address = interfaces[k][k2];
+                    if (/*address.family === 'IPv4' &&*/ !address.internal) {
+                        addresses.push(address.address);
+                    }
+                }
+            }
+
+            machineInfo.local_ip = addresses;
+            console.log("The local IP Addresses are "+JSON.stringify(machineInfo.local_ip));
+
             checkForConfiguredShares();
+
         }
 
     } else {
@@ -468,7 +496,15 @@ ipcMain.on('createNewShare', (event, path) => {
     var hash = md5(path+now);
 
     // ------- Register new share on server share list --------------
-    client['server'].write(JSON.stringify({'op': 'postNewShare','hash': hash, 'machineid': machineInfo.id, 'hostname': machineInfo.hostname, 'path': path}));
+    client['server'].write(
+        JSON.stringify({
+            'op': 'postNewShare',
+            'hash': hash,
+            'machineid': machineInfo.id,
+            'hostname': machineInfo.hostname,
+            'path': path,
+            'local_ip': machineInfo.local_ip
+        }));
 
 });
 
@@ -477,7 +513,16 @@ ipcMain.on('importNewShare', (event, data) => {
     var data = JSON.parse(data);
 
     // ------- Register new share on server share list --------------
-    client['server'].write(JSON.stringify({'op': 'importNewShare', 'machineid': machineInfo.id,'invitation_hash': data.invitation_hash, 'machineid': machineInfo.id, "hostname": machineInfo.hostname, "path": data.folderpath, 'hostname': machineInfo.hostname}));
+    client['server'].write(
+        JSON.stringify({
+            'op': 'importNewShare',
+            'invitation_hash': data.invitation_hash,
+            'machineid': machineInfo.id,
+            "hostname": machineInfo.hostname,
+            "path": data.folderpath,
+            'hostname': machineInfo.hostname,
+            'local_ip': machineInfo.local_ip
+        }));
 
 });
 
@@ -550,9 +595,173 @@ client['server'].on('data', function(data) {
             }
         }
 
+    } else if ( data.op === 'returnGetPunchDetailsFromIDsList' ) {
+
+        var punchConfs = data.data;
+        for (var i = 0; i < connectionsConfs.length; i++) {
+            for (var j = 0; j < punchConfs.length; j++) {
+                if ( connectionsConfs[i].machineid === punchConfs[j].machineid ) {
+                    
+                    connectionsConfs[i].ip = punchConfs[j].ip;
+                    connectionsConfs[i].port = punchConfs[j].port;
+                    connectionsConfs[i].status = punchConfs[j].status;
+                    connectionsConfs[i].local_ip = punchConfs[j].local_ip;
+
+                    var origin_address = connectionsConfs[i].ip+":"+connectionsConfs[i].port;
+                    
+                    if ( punchConfs[j].status === "disconnected" ) {
+                    
+                        connectionsConfs[i].type = "server";
+                    
+                    } else  if ( punchConfs[j].status === "ready_for_connection" ) {
+                        
+                        connectionsConfs[i].type = "client";
+
+                        // First try to connect localy
+                        console.log("connectionsConfs[i].local_ip ==> "+(typeof connectionsConfs[i].local_ip));
+                        console.log("connectionsConfs[i].local_ip.length ==> "+connectionsConfs[i].local_ip.length);
+
+                        if ( typeof connectionsConfs[i].local_ip != "undefined" && connectionsConfs[i].local_ip.length > 0 ) {
+                            console.log("Will try local connection method...");
+                            tryLocalConnection(connectionsConfs[i], origin_address, punchConfs[j], data, 0);    
+                        } else {
+                            // Or if no local IPs for remote machine, try hole punching method
+                            console.log("Going directly do hole punching method...");
+                            tryPunchConnection(data, punchConfs[j]);
+                        }
+                        
+                    }
+                    
+                    break;
+                
+                }
+            }
+        }
+
+        mainWindow.webContents.executeJavaScript("loadConnectionsList("+JSON.stringify(connectionsConfs)+");");
+
+    } else if ( data.op === 'forwardPunchRequest' ) {
+
+        var origin_address = data.data.punchOriginIP+":"+data.data.punchOriginPort;
+        console.log('Trying to connect to client '+origin_address+', hole punch should fail.');
+        client[origin_address] = net.createConnection({host : data.data.punchOriginIP, port : data.data.punchOriginPort}, function() {
+
+        });
+
+        client[origin_address].on('error', function (err) {
+            console.log("Failed to connect to orgin address "+origin_address+". It was expected. The server will be notified and forward this information to the origin.");
+            client['server'].write(
+                JSON.stringify({
+                    'op': 'returnForwardPunchRequest',
+                    'data': data.data,
+                    'machineid': machineInfo.id,
+                    "hostname": machineInfo.hostname,
+                    'local_ip': machineInfo.local_ip
+                }));
+        });
+
+    } else if ( data.op === 'returnSendPunchRequest' ) {
+
+        var destiny_address = data.data.punchDestinyIP+":"+data.data.punchDestinyPort;
+        client[destiny_address] = new net.Socket();
+
+        console.log("Trying to stablish final punch connection to "+destiny_address);
+        client[destiny_address].connect(data.data.punchDestinyPort, data.data.punchDestinyIP, function() {
+
+            client[destiny_address].setTimeout(0);
+            punch_time = 0;
+
+            console.log('Hole punching to '+origin_address+' successfully stablished!!!');
+            console.log("Sending hand shake...");
+            client[destiny_address].write(JSON.stringify({'op': 'handShake', 'data': data.data}));
+
+        });
+
+        // Try to hole punch for 30 seconds
+        var now = (new Date()).getTime();
+        if ( (now-punch_time) < 30000 ) {
+
+            client[destiny_address].setTimeout(10, function () {
+                // Make a retry for connection
+                console.log("Retry connection");
+                client['server'].write(
+                    JSON.stringify({
+                        'op': 'sendPunchRequest',
+                        'machineid': machineInfo.id,
+                        'hostname': machineInfo.hostname,
+                        'data': data.data,
+                        'local_ip': machineInfo.local_ip
+                    }));
+            });
+
+        } else {
+
+            client[destiny_address].setTimeout(0);
+            punch_time = 0;
+
+            console.log("Tried hole punching for 30 seconds and failed. Will try TURN approach.");
+
+        }
+
     }
 
 });
+
+function tryLocalConnection(connectionConf, origin_address, punchConf, data, counter) {
+
+    console.log("Trying to stablish connection with local approach for "+connectionConf.local_ip[counter]+":9999");
+    client[origin_address] = net.createConnection({host : connectionConf.local_ip[counter], port : 9999}, function() {
+        
+        client[origin_address].setTimeout(0);
+        console.log("Local connection successfully stablished to "+origin_address+"!");
+        console.log("Sending hand shake...");
+        client[origin_address].write(JSON.stringify({'op': 'handShake', 'data': data}));
+        
+    });
+
+    client[origin_address].setTimeout(5000, function () {
+        client[origin_address].setTimeout(0);
+        if ( counter < connectionConf.local_ip.length ) {
+            counter++;
+            tryLocalConnection(connectionConf, origin_address, punchConf, data, counter);
+        } else {
+            // If local connection could not be stablished within 10 seconds, try the hole punch approach
+            tryPunchConnection(data, punchConf);
+        }
+    });
+
+    client[origin_address].on('error', function (error) {
+        client[origin_address].setTimeout(0);
+        if ( counter < connectionConf.local_ip.length ) {
+            counter++;
+            tryLocalConnection(connectionConf, origin_address, punchConf, data, counter);
+        } else {
+            // If local connection could not be stablished within 10 seconds, try the hole punch approach
+            tryPunchConnection(data, punchConf);
+        }
+    });
+
+}
+
+function tryPunchConnection(data, punchConf) {
+
+    punch_time = 0;
+
+    client['server'].write(
+        JSON.stringify({
+            'op': 'sendPunchRequest',
+            'machineid': machineInfo.id,
+            'hostname': machineInfo.hostname,
+            'data': {
+                'punchOriginIP': data.originip,
+                'punchOriginPort': data.originport,
+                'punchDestinyIP': punchConf,
+                'punchDestinyPort': punchConf
+            },
+            'local_ip': machineInfo.local_ip
+        }));
+
+};
 
 function processFolderStructure(path, hash) {
                 
@@ -610,7 +819,7 @@ function returnGetSharePairs(data) {
                             }
                         }
                         if ( !connection_exists ) {
-                            connectionsConfs.push({"machineid": clients_from_share[k].machineid, "hostname": clients_from_share[k].hostname, "type": "client"});
+                            connectionsConfs.push({"machineid": clients_from_share[k].machineid, "hostname": clients_from_share[k].hostname});
                         }
                     }
                 }
@@ -623,8 +832,22 @@ function returnGetSharePairs(data) {
 
     }
 
+    // Discover IPs for all connectionsConfs clients
+    var machinesids_list = [];
+    for (var i = 0; i < connectionsConfs.length; i++) {
+        machinesids_list.push({"machineid": connectionsConfs[i].machineid});
+    }
+    console.log("Making request for getPunchDetailsFromIDsList...");
+    client['server'].write(
+        JSON.stringify({
+            "op": "getPunchDetailsFromIDsList",
+            "list": machinesids_list,
+            'machineid': machineInfo.id,
+            'hostname': machineInfo.hostname,
+            'local_ip': machineInfo.local_ip
+        }));
+
     mainWindow.webContents.executeJavaScript("loadShareList("+JSON.stringify(data.data)+");");
-    mainWindow.webContents.executeJavaScript("loadConnectionsList("+JSON.stringify(connectionsConfs)+");");
     
 }
 
@@ -650,7 +873,7 @@ function getShareList() {
 
 function executeGetShareList(id, data) {
 
-    var post_data = {'op': 'getSharePairs', 'data': data, 'machineid': machineInfo.id, 'hostname': machineInfo.hostname};
+    var post_data = {'op': 'getSharePairs', 'data': data, 'machineid': machineInfo.id, 'hostname': machineInfo.hostname, 'local_ip': machineInfo.local_ip};
     if ( client['server'].readyState !== "closed" ) {
         client['server'].write(JSON.stringify(post_data));
     } else {
@@ -683,7 +906,15 @@ ipcMain.on('getShareList', (event, variable) => {
 
 ipcMain.on('saveShareInvitation', (event, variable) => {
     var id_hash = md5(machineInfo.id+(new Date()).getTime()+variable);
-    client['server'].write(JSON.stringify({'op': 'saveShareInvitation', 'id': id_hash, 'share_hash': variable, 'machineid': machineInfo.id, 'hostname': machineInfo.hostname}));
+    client['server'].write(
+        JSON.stringify({
+            'op': 'saveShareInvitation',
+            'id': id_hash,
+            'share_hash': variable,
+            'machineid': machineInfo.id,
+            'hostname': machineInfo.hostname,
+            'local_ip': machineInfo.local_ip
+        }));
 });
 
 function dirTree(filename) {

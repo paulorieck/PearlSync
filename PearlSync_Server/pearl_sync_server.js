@@ -9,6 +9,17 @@ var isDBDebug = false;
 var socket = [];
 var details = [];
 
+var welcome_text =
+"-----------------------------------------\n"+
+"| Welcome to PearlSync Server Mode      |\n"+
+"|                                       |\n"+
+"| Copyright (c) 2019 Paulo André Rieck  |\n"+
+"| Licensed per MIT License              |\n"+
+"|                                       |\n"+
+"| paulo.rieck@gmail.com                 |\n"+
+"-----------------------------------------\n\n";
+console.log(welcome_text);
+
 function processArgs(args) {
 
 	args = args.split(',');
@@ -68,8 +79,8 @@ if ( isDBDebug ) {
 
 // assuming will connect first:
 var server = net.createServer(function (socket_) {
-	var address = socket_.address().remoteAddress+":"+socket_.address().remotePort;
-	//console.log("Stablishing connection with "+address+"\n");
+	var address = socket_.remoteAddress.replace("::ffff:", "")+":"+socket_.remotePort;
+	console.log("Stablishing new connection with "+address+"\n");
 	socket[address] = socket_;
 	Connects(address);
 });
@@ -87,22 +98,24 @@ function Connects (address) {
 
 		data = JSON.parse(data);
 
-		var id = data.machineid;
-		/*console.log('> ('+id+') assuming '+id+' is connecting\n');
-		console.log('> ('+id+') remote address and port are:', socket[address].remoteAddress, socket[address].remotePort);
-		console.log('> ('+id+') storing this for when another pair connects\n');*/
-
-		details[id] = {};
-		details[id].remoteAddress = socket[address].remoteAddress;
-		details[id].remotePort = socket[address].remotePort;
-		details[id].pingtime = (new Date()).getTime();
-		details[id].hostname = data.hostname;
-		details[id].machineid = id;
+		details[data.machineid] = {};
+		details[data.machineid].remoteAddress = socket[address].remoteAddress.replace("::ffff:", "");
+		details[data.machineid].remotePort = socket[address].remotePort;
+		details[data.machineid].pingtime = (new Date()).getTime();
+		details[data.machineid].hostname = data.hostname;
+		details[data.machineid].machineid = data.machineid;
+		details[data.machineid].local_ip = data.local_ip;
 
 		if ( data.op === 'postNewShare' ) {
 			
 			shares_db.put({"_id": data.hash, clients: [{"machineid": data.machineid, "hostname": data.hostname}]});
-			socket[address].write(JSON.stringify({'op': 'returnSaveNewShare', 'result': 'success', 'hash': data.hash, 'path': data.path}));
+			socket[address].write(
+				JSON.stringify({
+					'op': 'returnSaveNewShare',
+					'result': 'success',
+					'hash': data.hash,
+					'path': data.path
+				}));
 
 		} else if ( data.op === 'importNewShare' ) {
 
@@ -111,7 +124,13 @@ function Connects (address) {
 					doc2.clients.push({"machineid": data.machineid, "hostname": data.hostname});
 					console.log("tempClients before write to db ====> "+JSON.stringify(doc2.clients))
 					shares_db.put(doc2);
-					socket[address].write(JSON.stringify({'op': 'returnSaveNewShare', 'result': 'success', 'hash': doc1.share_hash, 'path': data.path}));
+					socket[address].write(
+						JSON.stringify({
+							'op': 'returnSaveNewShare',
+							'result': 'success',
+							'hash': doc1.share_hash,
+							'path': data.path
+						}));
 				});
 			});
 
@@ -145,7 +164,13 @@ function Connects (address) {
 
 			var timeout = (new Date().getTime());
 			invitations_db.put({'_id': data.id, 'share_hash': data.share_hash, 'timeout': timeout});
-			socket[address].write(JSON.stringify({'op': 'returnShareInvitation', 'share_invitation_id': data.id, 'timeout': timeout, 'share_hash': data.share_hash}));
+			socket[address].write(
+				JSON.stringify({
+					'op': 'returnShareInvitation',
+					'share_invitation_id': data.id,
+					'timeout': timeout,
+					'share_hash': data.share_hash
+				}));
 
 		} else if ( data.op === 'getPunchConfigFromIP' ) {
 
@@ -155,30 +180,87 @@ function Connects (address) {
 			var machineid = "";
 			var hostname = "";
 			var pingtime = 0;
+			var local_ip = [];
 			for (var i = 0; i < details.length; i++) {
 				if ( details[i].ip === ip && details[i].port === port ) {
 					machineid = details[i].machineid;
 					hostname = details[i].hostname;
 					pingtime = details[i].pingtime;
 					type = data.type;
+					local_ip = details[i].local_ip;
 					break;
 				}
 			}
 
-			socket[address].write(JSON.stringify({'op': 'returnGetPunchConfigFromIP', 'hostname': hostname, 'machineid': machineid, 'pingtime': pingtime, 'type': type, 'ip': ip, 'port': port}));
+			socket[address].write(
+				JSON.stringify({
+					'op': 'returnGetPunchConfigFromIP',
+					'hostname': hostname,
+					'machineid': machineid,
+					'pingtime': pingtime,
+					'type': type,
+					'ip': ip,
+					'port': port,
+					'local_ip': local_ip
+				}));
+
+		} else if ( data.op === 'getPunchDetailsFromIDsList' ) {
+
+			var machines_list = data.list;
+			for (var i = 0; i < machines_list.length; i++) {
+				if ( details[machines_list[i].machineid] != null && typeof details[machines_list[i].machineid] != "undefined" ) {
+					machines_list[i].status = 'ready_for_connection';
+					machines_list[i].ip = details[machines_list[i].machineid].remoteAddress;
+					machines_list[i].port = details[machines_list[i].machineid].remotePort;
+					machines_list[i].local_ip = details[machines_list[i].machineid].local_ip;
+				} else {
+					machines_list[i].status = 'disconnected';
+				}
+			}
+
+			socket[address].write(
+				JSON.stringify({
+					'op': 'returnGetPunchDetailsFromIDsList',
+					'data': machines_list,
+					'originip': socket[address].remoteAddress.replace("::ffff:", ""),
+					'originport': socket[address].remotePort
+				}));
+
+		} else if ( data.op === 'sendPunchRequest' ) {
+
+			var destiny_address = data.data.punchDestinyIP+":"+data.data.punchDestinyPort;
+			console.log('sendPunchRequest ==> destiny_address: '+destiny_address);
+			socket[destiny_address].write(JSON.stringify({'op': 'forwardPunchRequest', 'data': data.data}));
+
+		} else if ( data.op === 'returnForwardPunchRequest' ) {
+
+			var origin_address = data.data.punchOriginIP+":"+data.data.punchOriginPort;
+			socket[origin_address].write(JSON.stringify({'op': 'returnSendPunchRequest', 'data': data.data}));
 
 		}
 
-    });
+	});
 
 	socket[address].on('end', function () {
-	    console.log('> ('+socket[address].address.ip+':'+socket[address].address.port+') connection closed.\n');
-	    socket[address] = null;
+		console.log('> ('+socket[address].remoteAddress.replace("::ffff:", "")+':'+socket[address].remotePort+') connection closed.\n');
+		nullifyConnectionDetails(socket[address]);
+		socket[address] = null;
 	});
 
 	socket[address].on('error', function (err) {
-	    console.log('> ('+socket[address].address.ip+':'+socket[address].address.port+') connection closed with err (',err,').\n');
+		console.log('> ('+socket[address].remoteAddress.replace("::ffff:", "")+':'+socket[address].remotePort+') connection closed with err (',err,').\n');
+		nullifyConnectionDetails(socket[address]);
 	    socket[address] = null;
 	});
 
+}
+
+function nullifyConnectionDetails(socket) {
+	for (var i = 0; i < details.length; i++) {
+		if ( details[i].remoteAddress == socket.remoteAddress.replace("::ffff:", "") && details[i].remotePort == socket.remotePort ) {
+			details[i] = null;
+			break;
+		}
+	}
+	console.log("Connection with "+socket.remoteAddress.replace("::ffff:", "")+':'+socket.remotePort+" correcly nullified!")
 }
