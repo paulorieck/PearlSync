@@ -1,3 +1,8 @@
+global.client = [];
+global.machineInfo = null;
+global.connectionsConfs = [];
+global.socket = [];
+
 const fs = require('fs');
 const path = require('path');
 const md5 = require('md5');
@@ -7,11 +12,11 @@ const os = require('os');
 const net = require('net');
 const watch = require('node-watch');
 const node_machine_id = require('node-machine-id');
+const local_client_to_main_server_connection = require('./local_client');
+const local_server = require('./local_server');
+const pearlsync_tools = require('./pearlsync_tools');
 
-var machineInfo = null;
 var debug_browser = false;
-
-var punch_time = 0;
 
 function processArgs(args) {
 
@@ -45,7 +50,7 @@ function processArgs(args) {
 
     if ( changedConfigJSON ) {
 
-        createFileIfNotExists('config.json', "{}");
+        pearlsync_tools.createFileIfNotExists('config.json', "{}");
         var configs = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
 
         configs.server_ip = server_ip;
@@ -58,78 +63,7 @@ function processArgs(args) {
 }
 processArgs(process.argv+'');
 
-var connectionsConfs = [];
-
-var client = [];
-client['server'] = new net.Socket();
-
-var socket = [];
-var server = net.createServer(function (socket_) {
-    
-    var remote_address = socket_.remoteAddress.replace("::ffff:", "")+":"+socket_.remotePort;
-    console.log("Stablishing connection with "+remote_address+"\n");
-
-	socket[remote_address] = socket_;
-    Connects(remote_address);
-    
-});
-
-function Connects (address) {
-
-	socket[address].on('data', function (data) {
-
-		console.log("received data => "+data+"\n");
-
-        data = JSON.parse(data);
-
-        var confExists = false;
-        var i = 0;
-        for (i = 0; i < connectionsConfs.length; i++) {
-            if ( connectionsConfs[i].machineid === data.data.machineid ) {
-                confExists = true;
-                break;
-            }
-        }
-
-        if ( !confExists ) {
-            socket[address] = null;
-        } else {
-
-            if ( data.op === 'handShake' ) {
-
-                connectionsConfs[i].machineid = data.data.machineid;
-                connectionsConfs[i].ip = socket[address].remoteAddress;
-                connectionsConfs[i].port = socket[address].remotePort;
-                connectionsConfs[i].type = "server";
-                connectionsConfs[i].pingtime = (new Date()).getTime();
-                connectionsConfs[i].status = "connected";
-
-                mainWindow.webContents.executeJavaScript("loadConnectionsList("+JSON.stringify(connectionsConfs)+");");
-            
-            }
-
-        }
-
-    });
-
-	socket[address].on('end', function () {
-	    console.log('> ('+socket[address].remoteAddress+':'+socket[address].remotePort+') connection closed.\n');
-	    socket[address] = null;
-	});
-
-	socket[address].on('error', function (err) {
-	    console.log('> ('+socket[address].remoteAddress+':'+socket[address].remotePort+') connection closed with err (',err,').\n');
-	    socket[address] = null;
-    });
-    
-}
-
-server.listen(9999, function (err) {
-	if (err) {
-        return console.log(err+"\n");
-    }
-	console.log('server listening on', server.address().address + ':' + server.address().port+"\n");
-});
+local_server.startLocalServer();
 
 const {app, BrowserWindow, ipcMain, dialog} = require('electron');
 
@@ -145,7 +79,7 @@ var instructionsBeingProcessed = false;
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is GCed.
-var mainWindow = null;
+global.mainWindow = null;
 
 var server_ip = "";
 var server_default_port = 0;
@@ -164,64 +98,30 @@ app.on('window-all-closed', function() {
 app.on('ready', function() {
 
     // Create the browser window.
-    mainWindow = new BrowserWindow({width: 800, height: 600});
-    mainWindow.maximize();
+    global.mainWindow = new BrowserWindow({width: 800, height: 600});
+    global.mainWindow.maximize();
 
     // and load the index.html of the app.
-    mainWindow.loadURL('file://'+__dirname+'/index.html');
+    global.mainWindow.loadURL('file://'+__dirname+'/index.html');
 
     if ( debug_browser ) {
         // Open the devtools.
-        mainWindow.openDevTools();
+        global.mainWindow.openDevTools();
     }
     
     // Emitted when the window is closed.
-    mainWindow.on('closed', function() {
+    global.mainWindow.on('closed', function() {
         // Dereference the window object, usually you would store windows
         // in an array if your app supports multi windows, this is the time
         // when you should delete the corresponding element.
-        mainWindow = null;
+        global.mainWindow = null;
     });
 
     var configs = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
     server_ip = configs.server_ip;
     server_default_port = configs.server_default_port;
 
-    client['server'].connect(server_default_port, server_ip, function() {
-
-        console.log('Connected to server '+server_ip+":"+server_default_port);
-
-    });    
-
-    client['server'].on('end', function () {
-        // Try to reestablish connection
-        client['server'] = new net.Socket();
-        var reconnection = setInterval(function () {
-            client['server'].connect(server_default_port, server_ip, function() {
-                console.log('Connected to server '+server_ip+":"+server_default_port);
-                clearInterval(reconnection);
-            });
-        }, 10000);
-    });
-    
-    client['server'].on('error', function (err) {
-        // Try to reestablish connection
-        console.log("Error while connecting ==> "+err);
-        client['server'] = new net.Socket();
-        var reconnection = setInterval(function () {
-            client['server'].connect(server_default_port, server_ip, function() {
-                console.log('Connected to server '+server_ip+":"+server_default_port);
-                clearInterval(reconnection);
-            });
-        }, 10000);
-    });
-    
-    client['server'].on('uncaughtException', function (err) {
-        console.log("[uncaughtException] Error while connecting ==> "+err);
-    });
-
-    setTimeout(checkForMachineId, 1000);
-    setTimeout(startSharesProcessing, 2000);
+    checkForMachineId();
 
     setInterval(function() {
 
@@ -284,6 +184,9 @@ function startSharesProcessing() {
                     sharesProcessingContinuation(oldest_filename, sharelist_obj);
                 }));
 
+            console.log("Starting connection to server!");
+            local_client_to_main_server_connection.startConnectionToServer(server_ip, server_default_port);
+
         }
 
     });
@@ -306,7 +209,7 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
     var current_structure = processFolderStructure(sharelist_obj.path, sharelist_obj.hash);
 
     // Compare with current share structure
-    createFileIfNotExists('local_data/instructions.json', '[]');
+    pearlsync_tools.createFileIfNotExists('local_data/instructions.json', '[]');
     var oldInstructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf-8'));
     var newInstructions = compareStructures(oldest_structure, current_structure, []);
 
@@ -435,10 +338,10 @@ function checkForMachineId() {
     var machinIdFilePath = 'local_data/machine.json';
     if (fs.existsSync(machinIdFilePath)) {
         
-        machineInfo = JSON.parse(fs.readFileSync(machinIdFilePath, 'utf-8'));
-        console.group("Readed machine id: "+machineInfo.id);
+        global.machineInfo = JSON.parse(fs.readFileSync(machinIdFilePath, 'utf-8'));
+        console.group("Readed machine id: "+global.machineInfo.id);
 
-        if ( typeof machineInfo.id === 'undefined' ) {
+        if ( typeof global.machineInfo.id === 'undefined' ) {
             //console.log("No machine id found (2)");
             createNewMachineId();
         } else {
@@ -454,9 +357,10 @@ function checkForMachineId() {
                 }
             }
 
-            machineInfo.local_ip = addresses;
-            console.log("The local IP Addresses are "+JSON.stringify(machineInfo.local_ip));
+            global.machineInfo.local_ip = addresses;
+            console.log("The local IP Addresses are "+JSON.stringify(global.machineInfo.local_ip));
 
+            startSharesProcessing();
             checkForConfiguredShares();
 
         }
@@ -473,10 +377,10 @@ function checkForMachineId() {
 function createNewMachineId() {
 
     //console.log("Creating a new one");
-    machineInfo = {"id": node_machine_id.machineIdSync(), "hostname": os.hostname()};
-    //console.log("machineInfo.id: "+machineInfo.id);
+    global.machineInfo = {"id": node_machine_id.machineIdSync(), "hostname": os.hostname()};
+    //console.log("global.machineInfo.id: "+global.machineInfo.id);
 
-    fs.writeFileSync("local_data/machine.json", JSON.stringify(machineInfo));
+    fs.writeFileSync("local_data/machine.json", JSON.stringify(global.machineInfo));
     checkForConfiguredShares();
 
 }
@@ -485,7 +389,7 @@ function checkForConfiguredShares() {
     fs.readdir('local_data/shares/', (err, local_shares_files) => {
         if ( local_shares_files.length == 0 ) {
             //console.log("No pair found");
-            mainWindow.webContents.executeJavaScript("callModalAddNewShare();");
+            global.mainWindow.webContents.executeJavaScript("callModalAddNewShare();");
         }
     });
 }
@@ -496,14 +400,14 @@ ipcMain.on('createNewShare', (event, path) => {
     var hash = md5(path+now);
 
     // ------- Register new share on server share list --------------
-    client['server'].write(
+    global.client['server'].write(
         JSON.stringify({
             'op': 'postNewShare',
             'hash': hash,
-            'machineid': machineInfo.id,
-            'hostname': machineInfo.hostname,
+            'machineid': global.machineInfo.id,
+            'hostname': global.machineInfo.hostname,
             'path': path,
-            'local_ip': machineInfo.local_ip
+            'local_ip': global.machineInfo.local_ip
         }));
 
 });
@@ -513,252 +417,35 @@ ipcMain.on('importNewShare', (event, data) => {
     var data = JSON.parse(data);
 
     // ------- Register new share on server share list --------------
-    client['server'].write(
+    global.client['server'].write(
         JSON.stringify({
             'op': 'importNewShare',
             'invitation_hash': data.invitation_hash,
-            'machineid': machineInfo.id,
-            "hostname": machineInfo.hostname,
+            'machineid': global.machineInfo.id,
+            "hostname": global.machineInfo.hostname,
             "path": data.folderpath,
-            'hostname': machineInfo.hostname,
-            'local_ip': machineInfo.local_ip
+            'hostname': global.machineInfo.hostname,
+            'local_ip': global.machineInfo.local_ip
         }));
 
 });
-
-function getLocalShareList() {
-
-    createFileIfNotExists('local_data/sharelist.json', '[]');
-
-    var sharelist = null;
-    try {
-        sharelist = JSON.parse(fs.readFileSync('local_data/sharelist.json'));
-    } catch (Error) {
-        sharelist = [];
-    }
-
-    return sharelist;
-
-}
-
-client['server'].on('data', function(data) {
-
-    console.log('Received: ' + data);
-    data = JSON.parse(data);
-
-    if ( data.op === 'returnSaveNewShare' ) {
-
-        if ( data.result === 'success' ) {
-
-            createFileIfNotExists('local_data/sharelist.json', '[]');
-
-            // ------- Register new share on local share list --------------
-            var sharelist = getLocalShareList();
-
-            sharelist.push({'hash': data.hash, 'path': data.path});
-            fs.writeFileSync('local_data/sharelist.json', JSON.stringify(sharelist));
-
-            processFolderStructure(data.path, data.hash);
-
-            // ----- Show refreshed shares div ----------
-            getShareList();
-
-        }
-
-    } else if ( data.op === 'returnGetSharePairs' ) {
-
-        returnGetSharePairs(data);
-
-    } else if ( data.op === 'returnShareInvitation' ) {
-
-        createFileIfNotExists('local_data/invitations.json', '[]');
-
-        var invitation = JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8'));
-        invitation.push({"share_invitation_id": data.share_invitation_id, 'timeout': data.timeout, 'share_hash': data.share_hash});
-        fs.writeFile("local_data/invitations.json", JSON.stringify(invitation), function(err) {
-            if (err) {
-                return console.log(err);
-            } else {
-                getInvitationsList();
-            }
-        });
-
-    } else if ( data.op === 'returnGetPunchConfigFromIP' ) {
-
-        for (var i = 0; i < connectionsConfs.length; i++) {
-            if ( connectionsConfs[i].machineid === data.machineid ) {
-                connectionsConfs[i].pingtime = data.pingtime;
-                connectionsConfs[i].ip = data.ip;
-                connectionsConfs[i].port = data.port; 
-                mainWindow.webContents.executeJavaScript("loadConnectionsList("+JSON.stringify(connectionsConfs)+");");
-                break;
-            }
-        }
-
-    } else if ( data.op === 'returnGetPunchDetailsFromIDsList' ) {
-
-        var punchConfs = data.data;
-        for (var i = 0; i < connectionsConfs.length; i++) {
-            for (var j = 0; j < punchConfs.length; j++) {
-                if ( connectionsConfs[i].machineid === punchConfs[j].machineid ) {
-                    
-                    connectionsConfs[i].ip = punchConfs[j].ip;
-                    connectionsConfs[i].port = punchConfs[j].port;
-                    connectionsConfs[i].status = punchConfs[j].status;
-                    connectionsConfs[i].local_ip = punchConfs[j].local_ip;
-
-                    var origin_address = connectionsConfs[i].ip+":"+connectionsConfs[i].port;
-                    
-                    if ( punchConfs[j].status === "disconnected" ) {
-                    
-                        connectionsConfs[i].type = "server";
-                    
-                    } else  if ( punchConfs[j].status === "ready_for_connection" ) {
-                        
-                        connectionsConfs[i].type = "client";
-
-                        // First try to connect localy
-                        console.log("connectionsConfs[i].local_ip ==> "+(typeof connectionsConfs[i].local_ip));
-                        console.log("connectionsConfs[i].local_ip.length ==> "+connectionsConfs[i].local_ip.length);
-
-                        if ( typeof connectionsConfs[i].local_ip != "undefined" && connectionsConfs[i].local_ip.length > 0 ) {
-                            console.log("Will try local connection method...");
-                            tryLocalConnection(connectionsConfs[i], origin_address, punchConfs[j], data, 0);    
-                        } else {
-                            // Or if no local IPs for remote machine, try hole punching method
-                            console.log("Going directly do hole punching method...");
-                            tryPunchConnection(data, punchConfs[j]);
-                        }
-                        
-                    }
-                    
-                    break;
-                
-                }
-            }
-        }
-
-        mainWindow.webContents.executeJavaScript("loadConnectionsList("+JSON.stringify(connectionsConfs)+");");
-
-    } else if ( data.op === 'forwardPunchRequest' ) {
-
-        var origin_address = data.data.punchOriginIP+":"+data.data.punchOriginPort;
-        console.log('Trying to connect to client '+origin_address+', hole punch should fail.');
-        client[origin_address] = net.createConnection({host : data.data.punchOriginIP, port : data.data.punchOriginPort}, function() {
-
-        });
-
-        client[origin_address].on('error', function (err) {
-            console.log("Failed to connect to orgin address "+origin_address+". It was expected. The server will be notified and forward this information to the origin.");
-            client['server'].write(
-                JSON.stringify({
-                    'op': 'returnForwardPunchRequest',
-                    'data': data.data,
-                    'machineid': machineInfo.id,
-                    "hostname": machineInfo.hostname,
-                    'local_ip': machineInfo.local_ip
-                }));
-        });
-
-    } else if ( data.op === 'returnSendPunchRequest' ) {
-
-        var destiny_address = data.data.punchDestinyIP+":"+data.data.punchDestinyPort;
-        client[destiny_address] = new net.Socket();
-
-        console.log("Trying to stablish final punch connection to "+destiny_address);
-        client[destiny_address].connect(data.data.punchDestinyPort, data.data.punchDestinyIP, function() {
-
-            client[destiny_address].setTimeout(0);
-            punch_time = 0;
-
-            console.log('Hole punching to '+origin_address+' successfully stablished!!!');
-            console.log("Sending hand shake...");
-            client[destiny_address].write(JSON.stringify({'op': 'handShake', 'data': data.data}));
-
-        });
-
-        // Try to hole punch for 30 seconds
-        var now = (new Date()).getTime();
-        if ( (now-punch_time) < 30000 ) {
-
-            client[destiny_address].setTimeout(10, function () {
-                // Make a retry for connection
-                console.log("Retry connection");
-                client['server'].write(
-                    JSON.stringify({
-                        'op': 'sendPunchRequest',
-                        'machineid': machineInfo.id,
-                        'hostname': machineInfo.hostname,
-                        'data': data.data,
-                        'local_ip': machineInfo.local_ip
-                    }));
-            });
-
-        } else {
-
-            client[destiny_address].setTimeout(0);
-            punch_time = 0;
-
-            console.log("Tried hole punching for 30 seconds and failed. Will try TURN approach.");
-
-        }
-
-    }
-
-});
-
-function tryLocalConnection(connectionConf, origin_address, punchConf, data, counter) {
-
-    console.log("Trying to stablish connection with local approach for "+connectionConf.local_ip[counter]+":9999");
-    client[origin_address] = net.createConnection({host : connectionConf.local_ip[counter], port : 9999}, function() {
-        
-        client[origin_address].setTimeout(0);
-        console.log("Local connection successfully stablished to "+origin_address+"!");
-        console.log("Sending hand shake...");
-        client[origin_address].write(JSON.stringify({'op': 'handShake', 'data': data}));
-        
-    });
-
-    client[origin_address].setTimeout(5000, function () {
-        client[origin_address].setTimeout(0);
-        if ( counter < connectionConf.local_ip.length ) {
-            counter++;
-            tryLocalConnection(connectionConf, origin_address, punchConf, data, counter);
-        } else {
-            // If local connection could not be stablished within 10 seconds, try the hole punch approach
-            tryPunchConnection(data, punchConf);
-        }
-    });
-
-    client[origin_address].on('error', function (error) {
-        client[origin_address].setTimeout(0);
-        if ( counter < connectionConf.local_ip.length ) {
-            counter++;
-            tryLocalConnection(connectionConf, origin_address, punchConf, data, counter);
-        } else {
-            // If local connection could not be stablished within 10 seconds, try the hole punch approach
-            tryPunchConnection(data, punchConf);
-        }
-    });
-
-}
 
 function tryPunchConnection(data, punchConf) {
 
     punch_time = 0;
 
-    client['server'].write(
+    global.client['server'].write(
         JSON.stringify({
             'op': 'sendPunchRequest',
-            'machineid': machineInfo.id,
-            'hostname': machineInfo.hostname,
+            'machineid': global.machineInfo.id,
+            'hostname': global.machineInfo.hostname,
             'data': {
                 'punchOriginIP': data.originip,
                 'punchOriginPort': data.originport,
                 'punchDestinyIP': punchConf,
                 'punchDestinyPort': punchConf
             },
-            'local_ip': machineInfo.local_ip
+            'local_ip': global.machineInfo.local_ip
         }));
 
 };
@@ -786,100 +473,20 @@ function processFolderStructure(path, hash) {
 
 }
 
-function createFileIfNotExists(path, content) {
-    if ( !fs.existsSync(path) ) {
-        fs.writeFileSync(path, content);
-    }
-}
-
-function returnGetSharePairs(data) {
-
-    connectionsConfs = [];
-
-    var sharelist = getLocalShareList();
-
-    for (var i = 0; i < sharelist.length; i++) {
-
-        console.log("processing returnGetSharePairs ====> sharelist[i].hash: "+sharelist[i].hash);
-        
-        for (var j = 0; j < data.data.length; j++) {
-
-            if ( data.data[j].hash === sharelist[i].hash ) {
-
-                data.data[j].path = sharelist[i].path;
-
-                var clients_from_share = data.data[j].clients;
-                var connection_exists = false;
-                for (var k = 0; k < clients_from_share.length; k++) {
-                    if ( clients_from_share[k].machineid !== machineInfo.id ) {
-                        for (var j = 0; j < connectionsConfs.length; j++) {
-                            if ( connectionsConfs[j].machineid === clients_from_share[k].machineid ) {
-                                connection_exists = true;
-                                break;
-                            }
-                        }
-                        if ( !connection_exists ) {
-                            connectionsConfs.push({"machineid": clients_from_share[k].machineid, "hostname": clients_from_share[k].hostname});
-                        }
-                    }
-                }
-                
-                break;
-
-            }
-
-        }
-
-    }
-
-    // Discover IPs for all connectionsConfs clients
-    var machinesids_list = [];
-    for (var i = 0; i < connectionsConfs.length; i++) {
-        machinesids_list.push({"machineid": connectionsConfs[i].machineid});
-    }
-    console.log("Making request for getPunchDetailsFromIDsList...");
-    client['server'].write(
-        JSON.stringify({
-            "op": "getPunchDetailsFromIDsList",
-            "list": machinesids_list,
-            'machineid': machineInfo.id,
-            'hostname': machineInfo.hostname,
-            'local_ip': machineInfo.local_ip
-        }));
-
-    mainWindow.webContents.executeJavaScript("loadShareList("+JSON.stringify(data.data)+");");
-    
-}
-
 function getShareList() {
 
-    if ( machineInfo == null ) {
+    if ( global.machineInfo == null ) {
 
         console.log("machineInfo == null");
         setTimeout(getShareList, 1000);
 
     } else {
 
-        createFileIfNotExists('local_data/sharelist.json', '[]');
-
-        var data = JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8'));
+        pearlsync_tools.createFileIfNotExists('local_data/sharelist.json', '[]');
 
         // Build the post string from an object
-        executeGetShareList(machineInfo.id, data);
+        pearlsync_tools.executeGetShareList(JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8')));
     
-    }
-
-}
-
-function executeGetShareList(id, data) {
-
-    var post_data = {'op': 'getSharePairs', 'data': data, 'machineid': machineInfo.id, 'hostname': machineInfo.hostname, 'local_ip': machineInfo.local_ip};
-    if ( client['server'].readyState !== "closed" ) {
-        client['server'].write(JSON.stringify(post_data));
-    } else {
-        setTimeout(function () {
-            executeGetShareList(id, data);
-        }, 10000);
     }
 
 }
@@ -889,10 +496,8 @@ function getInvitationsList() {
     createFileIfNotExists('local_data/invitations.json', '[]');
     createFileIfNotExists('local_data/sharelist.json', '[]');
 
-    var invitations = JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8'));
-    var shares = JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8'));
-    var retObj = {"invitations": invitations, "shares": shares};
-    mainWindow.webContents.executeJavaScript("returnLoadInvitationsList("+JSON.stringify(retObj)+")");
+    var retObj = {"invitations": JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8')), "shares": JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8'))};
+    global.mainWindow.webContents.executeJavaScript("returnLoadInvitationsList("+JSON.stringify(retObj)+")");
 
 }
 
@@ -905,15 +510,15 @@ ipcMain.on('getShareList', (event, variable) => {
 });
 
 ipcMain.on('saveShareInvitation', (event, variable) => {
-    var id_hash = md5(machineInfo.id+(new Date()).getTime()+variable);
-    client['server'].write(
+    var id_hash = md5(global.machineInfo.id+(new Date()).getTime()+variable);
+    global.client['server'].write(
         JSON.stringify({
             'op': 'saveShareInvitation',
             'id': id_hash,
             'share_hash': variable,
-            'machineid': machineInfo.id,
-            'hostname': machineInfo.hostname,
-            'local_ip': machineInfo.local_ip
+            'machineid': global.machineInfo.id,
+            'hostname': global.machineInfo.hostname,
+            'local_ip': global.machineInfo.local_ip
         }));
 });
 
@@ -947,6 +552,8 @@ function sendInstructionsToPairs(instructions) {
 
 
     }
+
+    instructionsBeingProcessed = false;
 
 }
 

@@ -47,6 +47,22 @@
                 color: #fff;
                 cursor: pointer;
             }
+            .dot {
+                height: 15px;
+                width: 15px;
+                background-color: #bbb;
+                border-radius: 50%;
+                display: inline-block;
+            }
+            .red_dot {
+                background-color: rgb(136, 25, 25);
+            }
+            .yellow_dot {
+                background-color: rgb(255, 209, 57);
+            }
+            .green_dot {
+                background-color: rgb(108, 155, 81);
+            }
         </style>
 
     </head>
@@ -254,16 +270,30 @@
             console.log("connectionsList");
             console.log(connectionsList);
 
+
+
             $("#table_connections").empty();
             for (var i = 0; i < connectionsList.length; i++) {
+
+                var color_class = "";
+                if ( connectionsList[i].status === "connected" ) {
+                    color_class = "green_dot";
+                } else if ( connectionsList[i].status === "disconnected" ) {
+                    color_class = "red_dot";
+                } else if ( connectionsList[i].status === "ready_for_connection" ) {
+                    color_class = "yellow_dot";
+                }
+
                 $("#table_connections").append(
                     "<tr>"+
                         "<td style='display: none;'>"+connectionsList[i].machineid+"</td>"+
                         "<td>"+connectionsList[i].hostname+"</td>"+
                         "<td>"+
+                            "<span class='dot "+color_class+"'></span>"+
                         "</td>"+
                     "</tr>"
                 );
+
             }
 
         }

@@ -256,11 +256,15 @@ function Connects (address) {
 }
 
 function nullifyConnectionDetails(socket) {
-	for (var i = 0; i < details.length; i++) {
-		if ( details[i].remoteAddress == socket.remoteAddress.replace("::ffff:", "") && details[i].remotePort == socket.remotePort ) {
-			details[i] = null;
-			break;
+
+	var new_details = [];
+	for (var i in details) {
+		console.log("1) details["+i+"]: "+JSON.stringify(details[i]));
+		if ( details[i].remoteAddress !== socket.remoteAddress.replace("::ffff:", "") || details[i].remotePort !== socket.remotePort ) {
+			new_details[details[i].remoteAddress+":"+details[i].remotePort] = details[i];	
 		}
 	}
-	console.log("Connection with "+socket.remoteAddress.replace("::ffff:", "")+':'+socket.remotePort+" correcly nullified!")
+	details = new_details;
+	console.log("Connection with "+socket.remoteAddress.replace("::ffff:", "")+':'+socket.remotePort+" correcly nullified!");
+
 }
