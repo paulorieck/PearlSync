@@ -263,6 +263,8 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
 
                                     var now = (new Date()).getTime();
 
+                                    var hash = local_shares_files[k].substring(0, "_");
+
                                     for (var k = 0; k < numbOfFiles; k++) {
 
                                         var init = k*1024;
@@ -272,7 +274,7 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
                                         }
 
                                         var base64part = base64.substring(init, end);
-                                        global.client[origin_address].write(JSON.stringify({'op': 'sendSyncroReportFile', 'machineid': global.machineInfo.id, 'filename': 'remote_data/shares/'+local_shares_files[k], 'number_of_parts': numbOfFiles, 'counter': k, 'base64part': base64part, 'time': now}));
+                                        global.client[origin_address].write(JSON.stringify({'op': 'sendSyncroReportFile', 'machineid': global.machineInfo.id, 'filename': 'remote_data/shares/'+local_shares_files[k], 'number_of_parts': numbOfFiles, 'counter': k, 'base64part': base64part, 'hash': hash, 'time': now}));
 
                                     }
 

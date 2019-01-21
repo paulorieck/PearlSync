@@ -211,7 +211,7 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
     // Compare with current share structure
     pearlsync_tools.createFileIfNotExists('local_data/instructions.json', '[]');
     var oldInstructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf-8'));
-    var newInstructions = compareStructures(oldest_structure, current_structure, []);
+    var newInstructions = pearlsync_tools.compareStructures(oldest_structure, current_structure, [], 'local');
 
     // Starts to watch files for modifications
     watcher[sharelist_obj.hash] = watch(sharelist_obj.path, {recursive: true});
@@ -282,54 +282,6 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
             console.log('local_data/shares/'+oldest_filename+'.zip was deleted');
         }
     });
-
-}
-
-function compareStructures(oldStructure, currentStructure, instructions) {
-
-    for (var i = 0; i < oldStructure.length; i++) {
-        
-        var removed = true;
-        var changed = false;
-        for (var j = 0; j < currentStructure.length; j++) {
-            if ( oldStructure[i].path === currentStructure[j].path && oldStructure[i].type === currentStructure[j].type ) {
-                removed = false;
-                if ( oldStructure[i].type === 'folder' ) {
-                    compareStructures(oldStructure[i].children, currentStructure[j].children, instructions);
-                } else if ( oldStructure[i].type === 'file' ) {
-                    if ( oldStructure[i].last_modification !== currentStructure[j].last_modification ) {
-                        changed = true;
-                    }
-                }
-                break;
-            }
-        }
-
-        if ( removed ) {
-            instructions.push({'op': 'remove', 'path': oldStructure[i].path, 'execution': 0, 'type': oldStructure[i].type});
-        } else if ( changed ) {
-            instructions.push({'op': 'change', 'path': oldStructure[i].path, 'execution': 0, 'type': oldStructure[i].type});
-        }
-
-    }
-
-    for (var i = 0; i < currentStructure.length; i++) {
-
-        var added = true;
-        for (var j = 0; j < oldStructure.length; j++) {
-            if ( oldStructure[j].path === currentStructure[i].path && oldStructure[j].type === currentStructure[i].type ) {
-                added = false;
-                break;
-            }
-        }
-
-        if ( added ) {
-            instructions.push({'op': 'add', 'path': currentStructure[i].path, 'execution': 0, 'type': currentStructure[i].type});
-        }
-
-    }
-
-    return instructions;
 
 }
 

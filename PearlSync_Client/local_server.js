@@ -1,9 +1,10 @@
 const net = require('net');
 const fs = require('fs');
+const pearlsync_tools = require('./pearlsync_tools');
 
 var received_files = [];
 
-function checkReceivedFile() {
+function checkReceivedFileSync() {
 
     for (var i = 0; i < received_files.length; i++) {
         var number_of_parts = received_files[i].number_of_parts;
@@ -46,7 +47,7 @@ function checkReceivedFile() {
                     received_files.splice(j, 1);
                 }
             }
-
+            
         }
 
     }
@@ -109,7 +110,40 @@ module.exports = {
                     } else if ( data.op === 'sendSyncroReportFile' ) {
 
                         received_files.push(data);
-                        checkReceivedFile();
+                        checkReceivedFileSync();
+
+                        // Process file and compare with local one
+                        fs.createReadStream(data.filename)
+                            .pipe(unzip.Extract({path:'lremote_data/shares/'}).on('close', function () {
+
+                                var hash = data.hash;
+                                var remote_structure = JSON.parse(fs.readFileSync(data.filename.replace('.zip', '')));
+                                
+                                fs.readdir('local_data/shares/', (err, local_shares_files) => {
+
+                                    for (var i = 0; i < share_list.length; i++) {
+                                        
+                                        if ( share_list[i].indexOf(hash) != -1 ) {
+
+                                            // File found
+                                            console.log("Local file found to compare ==> "+share_list[i]);
+                                            
+                                            var local_structure = JSON.parse(fs.readFileSync(hare_list[i]));
+
+                                            var instructions = pearlsync_tools.compareStructures(remote_structure, local_structure, [], 'remote');
+                                            console.log("instructions: "+JSON.stringify(instructions));
+
+                                            global.socket[address].write(JSON.stringify({'op': 'returnSendSyncroReportFile', 'machineid': global.machineInfo.id, 'hash': hash}));
+
+                                            break;
+
+                                        }
+
+                                    }
+
+                                });
+
+                            }));
 
                     }
             

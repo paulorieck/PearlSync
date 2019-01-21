@@ -95,6 +95,66 @@ module.exports = {
             }, 10000);
         }
     
+    },
+
+    compareStructures: function (oldStructure, currentStructure, instructions, type) {
+
+        for (var i = 0; i < oldStructure.length; i++) {
+            
+            var removed = true;
+            var changed = false;
+            for (var j = 0; j < currentStructure.length; j++) {
+                if ( oldStructure[i].path === currentStructure[j].path && oldStructure[i].type === currentStructure[j].type ) {
+                    removed = false;
+                    if ( oldStructure[i].type === 'folder' ) {
+                        this.compareStructures(oldStructure[i].children, currentStructure[j].children, instructions, type);
+                    } else if ( oldStructure[i].type === 'file' ) {
+                        if ( oldStructure[i].last_modification !== currentStructure[j].last_modification ) {
+                            changed = true;
+                        }
+                    }
+                    break;
+                }
+            }
+    
+            if ( removed ) {
+                if ( type == 'local' ) {
+                    instructions.push({'op': 'remove', 'path': oldStructure[i].path, 'execution': 0, 'type': oldStructure[i].type});
+                } else if ( type == 'remote' ) {
+
+                }
+            } else if ( changed ) {
+                if ( type == 'local' ) {
+                    instructions.push({'op': 'change', 'path': oldStructure[i].path, 'execution': 0, 'type': oldStructure[i].type});
+                } else if ( type == 'remote' ) {
+
+                }
+            }
+    
+        }
+    
+        for (var i = 0; i < currentStructure.length; i++) {
+    
+            var added = true;
+            for (var j = 0; j < oldStructure.length; j++) {
+                if ( oldStructure[j].path === currentStructure[i].path && oldStructure[j].type === currentStructure[i].type ) {
+                    added = false;
+                    break;
+                }
+            }
+    
+            if ( added ) {
+                if ( type == 'local' ) {
+                    instructions.push({'op': 'add', 'path': currentStructure[i].path, 'execution': 0, 'type': currentStructure[i].type});
+                } else if ( type == 'remote' ) {
+
+                }
+            }
+    
+        }
+    
+        return instructions;
+    
     }
 
 }
