@@ -97,58 +97,75 @@ module.exports = {
     
     },
 
-    compareStructures: function (oldStructure, currentStructure, instructions, type) {
+    compareStructures: function (oldOrRemoteStructure, currentOrLocalStructure, instructions, type, machineid, relative_path, shareid) {
 
-        for (var i = 0; i < oldStructure.length; i++) {
-            
-            var removed = true;
-            var changed = false;
-            for (var j = 0; j < currentStructure.length; j++) {
-                if ( oldStructure[i].path === currentStructure[j].path && oldStructure[i].type === currentStructure[j].type ) {
-                    removed = false;
-                    if ( oldStructure[i].type === 'folder' ) {
-                        this.compareStructures(oldStructure[i].children, currentStructure[j].children, instructions, type);
-                    } else if ( oldStructure[i].type === 'file' ) {
-                        if ( oldStructure[i].last_modification !== currentStructure[j].last_modification ) {
-                            changed = true;
+        console.log("oldOrRemoteStructure => "+JSON.stringify(oldOrRemoteStructure));
+        console.log("currentOrLocalStructure => "+JSON.stringify(currentOrLocalStructure));
+
+        for (var i = 0; i < oldOrRemoteStructure.length; i++) {
+
+            if ( oldOrRemoteStructure[i].path.indexOf(".DS_Store") === -1 ) {
+
+                var removed = true;
+                var changed = false;
+                for (var j = 0; j < currentOrLocalStructure.length; j++) {
+                    if ( oldOrRemoteStructure[i].path === currentOrLocalStructure[j].path && oldOrRemoteStructure[i].type === currentOrLocalStructure[j].type ) {
+                        removed = false;
+                        if ( oldOrRemoteStructure[i].type === 'folder' ) {
+                            this.compareStructures(oldOrRemoteStructure[i].children, currentOrLocalStructure[j].children, instructions, type, machineid, relative_path, shareid);
+                        } else if ( oldOrRemoteStructure[i].type === 'file' ) {
+                            if ( oldOrRemoteStructure[i].last_modification !== currentOrLocalStructure[j].last_modification ) {
+                                changed = true;
+                            }
                         }
+                        break;
                     }
-                    break;
                 }
-            }
-    
-            if ( removed ) {
-                if ( type == 'local' ) {
-                    instructions.push({'op': 'remove', 'path': oldStructure[i].path, 'execution': 0, 'type': oldStructure[i].type});
-                } else if ( type == 'remote' ) {
 
+                var path = oldOrRemoteStructure[i].path.replace(relative_path, '');
+        
+                if ( removed ) {
+                    if ( type == 'local' ) {
+                        instructions.push({'op': 'remove', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
+                    } else if ( type == 'remote' ) {
+                        instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                    }
+                } else if ( changed ) {
+                    if ( type == 'local' ) {
+                        instructions.push({'op': 'change', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
+                    } else if ( type == 'remote' ) {
+                        instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                    }
                 }
-            } else if ( changed ) {
-                if ( type == 'local' ) {
-                    instructions.push({'op': 'change', 'path': oldStructure[i].path, 'execution': 0, 'type': oldStructure[i].type});
-                } else if ( type == 'remote' ) {
 
-                }
             }
-    
+            
         }
     
-        for (var i = 0; i < currentStructure.length; i++) {
-    
-            var added = true;
-            for (var j = 0; j < oldStructure.length; j++) {
-                if ( oldStructure[j].path === currentStructure[i].path && oldStructure[j].type === currentStructure[i].type ) {
-                    added = false;
-                    break;
-                }
-            }
-    
-            if ( added ) {
-                if ( type == 'local' ) {
-                    instructions.push({'op': 'add', 'path': currentStructure[i].path, 'execution': 0, 'type': currentStructure[i].type});
-                } else if ( type == 'remote' ) {
+        for (var i = 0; i < currentOrLocalStructure.length; i++) {
 
+            if ( currentOrLocalStructure[i].path.indexOf(".DS_Store") === -1 ) {
+
+                var added = true;
+                for (var j = 0; j < oldOrRemoteStructure.length; j++) {
+                    if ( oldOrRemoteStructure[j].path === currentOrLocalStructure[i].path && oldOrRemoteStructure[j].type === currentOrLocalStructure[i].type ) {
+                        added = false;
+                        break;
+                    }
                 }
+        
+                if ( added ) {
+
+                    console.log("currentOrLocalStructure["+i+"].path: "+currentOrLocalStructure[i].path+", relative_path: "+relative_path);
+                    var path = currentOrLocalStructure[i].path.replace(relative_path, '');
+
+                    if ( type == 'local' ) {
+                        instructions.push({'op': 'add', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'shareid': shareid});
+                    } else if ( type == 'remote' ) {
+                        instructions.push({'op': 'get', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                    }
+                }
+
             }
     
         }

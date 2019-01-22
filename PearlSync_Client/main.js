@@ -2,6 +2,7 @@ global.client = [];
 global.machineInfo = null;
 global.connectionsConfs = [];
 global.socket = [];
+global.instructionsBeingProcessed = false;
 
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +10,6 @@ const md5 = require('md5');
 const zip = new require('node-zip')();
 const unzip = new require('unzip');
 const os = require('os');
-const net = require('net');
 const watch = require('node-watch');
 const node_machine_id = require('node-machine-id');
 const local_client_to_main_server_connection = require('./local_client');
@@ -51,7 +51,7 @@ function processArgs(args) {
     if ( changedConfigJSON ) {
 
         pearlsync_tools.createFileIfNotExists('config.json', "{}");
-        var configs = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
+        var configs = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 
         configs.server_ip = server_ip;
         configs.server_default_port = server_port;
@@ -72,7 +72,6 @@ dialog.showErrorBox = function(title, content) {
 };
 
 var watcher = [];
-var instructionsBeingProcessed = false;
 
 // Report crashes to our server.
 //require('crash-reporter').start();
@@ -117,7 +116,7 @@ app.on('ready', function() {
         global.mainWindow = null;
     });
 
-    var configs = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
+    var configs = JSON.parse(fs.readFileSync('config.json', 'utf8'));
     server_ip = configs.server_ip;
     server_default_port = configs.server_default_port;
 
@@ -125,9 +124,9 @@ app.on('ready', function() {
 
     setInterval(function() {
 
-        var instructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf-8'));
+        var instructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf8'));
 
-        if ( !instructionsBeingProcessed ) {
+        if ( !global.instructionsBeingProcessed ) {
             sendInstructionsToPairs(instructions);
         }
 
@@ -140,7 +139,7 @@ app.on('ready', function() {
 function startSharesProcessing() {
 
     // Get list of shares
-    var share_list = JSON.parse(fs.readFileSync("local_data/sharelist.json", "utf-8"));
+    var share_list = JSON.parse(fs.readFileSync("local_data/sharelist.json", "utf8"));
 
     // Get list of share files
     fs.readdir('local_data/shares/', (err, local_shares_files) => {
@@ -195,7 +194,7 @@ function startSharesProcessing() {
 
 function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
 
-    var oldest_structure = JSON.parse(fs.readFileSync('local_data/shares/'+oldest_filename, 'utf-8'));
+    var oldest_structure = JSON.parse(fs.readFileSync('local_data/shares/'+oldest_filename, 'utf8'));
         
     fs.unlink('local_data/shares/'+oldest_filename, (err) => {
         if (err) {
@@ -210,8 +209,8 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
 
     // Compare with current share structure
     pearlsync_tools.createFileIfNotExists('local_data/instructions.json', '[]');
-    var oldInstructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf-8'));
-    var newInstructions = pearlsync_tools.compareStructures(oldest_structure, current_structure, [], 'local');
+    var oldInstructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf8'));
+    var newInstructions = pearlsync_tools.compareStructures(oldest_structure, current_structure, [], 'local', global.machineInfo.id, sharelist_obj.path, sharelist_obj.hash);
 
     // Starts to watch files for modifications
     watcher[sharelist_obj.hash] = watch(sharelist_obj.path, {recursive: true});
@@ -238,8 +237,8 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
             if (err) {
                 return console.log(err);
             } else {
-                if ( !instructionsBeingProcessed ) {
-                    instructionsBeingProcessed = true;
+                if ( !global.instructionsBeingProcessed ) {
+                    global.instructionsBeingProcessed = true;
                     setTimeout(function() {
                         sendInstructionsToPairs(oldInstructions);
                     }, 10000);
@@ -265,8 +264,8 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
         if (err) {
             return console.log(err);
         } else {
-            if ( !instructionsBeingProcessed ) {
-                instructionsBeingProcessed = true;
+            if ( !global.instructionsBeingProcessed ) {
+                global.instructionsBeingProcessed = true;
                 setTimeout(function() {
                     sendInstructionsToPairs(oldInstructions);
                 }, 10000);
@@ -290,7 +289,7 @@ function checkForMachineId() {
     var machinIdFilePath = 'local_data/machine.json';
     if (fs.existsSync(machinIdFilePath)) {
         
-        global.machineInfo = JSON.parse(fs.readFileSync(machinIdFilePath, 'utf-8'));
+        global.machineInfo = JSON.parse(fs.readFileSync(machinIdFilePath, 'utf8'));
         console.group("Readed machine id: "+global.machineInfo.id);
 
         if ( typeof global.machineInfo.id === 'undefined' ) {
@@ -437,7 +436,7 @@ function getShareList() {
         pearlsync_tools.createFileIfNotExists('local_data/sharelist.json', '[]');
 
         // Build the post string from an object
-        pearlsync_tools.executeGetShareList(JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8')));
+        pearlsync_tools.executeGetShareList(JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf8')));
     
     }
 
@@ -448,7 +447,7 @@ function getInvitationsList() {
     createFileIfNotExists('local_data/invitations.json', '[]');
     createFileIfNotExists('local_data/sharelist.json', '[]');
 
-    var retObj = {"invitations": JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8')), "shares": JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf-8'))};
+    var retObj = {"invitations": JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf8')), "shares": JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf8'))};
     global.mainWindow.webContents.executeJavaScript("returnLoadInvitationsList("+JSON.stringify(retObj)+")");
 
 }
@@ -497,15 +496,67 @@ function dirTree(filename) {
 
 function sendInstructionsToPairs(instructions) {
 
-    instructionsBeingProcessed = true;
+    global.instructionsBeingProcessed = true;
 
     for (var i = 0; i < instructions.length; i++) {
 
+        // Search for credentials on connectionsConfs
+        var address_key = "";
+        for (var j = 0; j < global.connectionsConfs.length; j++) {
+            if ( instructions[i].machineid === connectionsConfs[j].machineid ) {
+                address_key = global.connectionsConfs[i].ip+":"+global.connectionsConfs[i].port;
+                break;
+            }
+        }
 
+        if ( address_key !== "" ) {
+
+            var now = (new Date()).getTime();
+
+            if ( instructions[i].op === 'get' ) {
+
+                global.client[origin_address].write(JSON.stringify({'op': 'getFile', 'machineid': global.machineInfo.id, 'filename': instructions[i].path, 'hash': instructions[i].shareid, 'time': now}));
+
+            } else if ( instructions[i].op === 'send' ) {
+
+                // Get relative path
+                var relative_path = "";
+                var share_list = JSON.parse(fs.readFileSync("local_data/sharelist.json", "utf8"));
+                for (var j = 0; j < share_list.length; j++) {
+                    if ( share_list[j].hash === instructions[i].shareid ) {
+                        relative_path = share_list[j].path;
+                        break;
+                    }
+                }
+
+                // Open file to send
+                var base64 = (fs.readFileSync(relative_path+instructions[i].path)).toString('base64');
+
+                var len = base64.length;
+                var numbOfFiles = Math.ceil(len/1024);
+
+                for (var j = 0; j < numbOfFiles; j++) {
+
+                    console.log("File to send: "+relative_path+instructions[i].path);
+
+                    var init = j*1024*512;
+                    var end = (j+1)*1024*512;
+                    if ( end > len ) {
+                        end = len;
+                    }
+
+                    var base64part = base64.substring(init, end);
+                    global.client[origin_address].write(JSON.stringify({'op': 'sendFile', 'machineid': global.machineInfo.id, 'filename': instructions[i].path, 'number_of_parts': numbOfFiles, 'counter': j, 'base64part': base64part, 'hash': instructions[i].shareid, 'time': now}));
+
+                }
+
+            }
+
+        }
 
     }
 
-    instructionsBeingProcessed = false;
+    global.instructionsBeingProcessed = false;
 
 }
 

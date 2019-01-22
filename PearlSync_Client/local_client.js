@@ -71,7 +71,7 @@ module.exports = {
         
                 pearlsync_tools.createFileIfNotExists('local_data/invitations.json', '[]');
         
-                var invitation = JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf-8'));
+                var invitation = JSON.parse(fs.readFileSync('local_data/invitations.json', 'utf8'));
                 invitation.push({"share_invitation_id": data.share_invitation_id, 'timeout': data.timeout, 'share_hash': data.share_hash});
                 fs.writeFile("local_data/invitations.json", JSON.stringify(invitation), function(err) {
                     if (err) {
@@ -263,18 +263,21 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
 
                                     var now = (new Date()).getTime();
 
-                                    var hash = local_shares_files[k].substring(0, "_");
+                                    var hash = local_shares_files[k].substring(0, local_shares_files[k].indexOf("_"));
+                                    console.log("hash to send: "+hash);
 
-                                    for (var k = 0; k < numbOfFiles; k++) {
+                                    for (var l = 0; l < numbOfFiles; l++) {
 
-                                        var init = k*1024;
-                                        var end = (k+1)*1024;
+                                        console.log("File to send: "+local_shares_files[k]);
+
+                                        var init = l*1024*512;
+                                        var end = (l+1)*1024*512;
                                         if ( end > len ) {
                                             end = len;
                                         }
 
                                         var base64part = base64.substring(init, end);
-                                        global.client[origin_address].write(JSON.stringify({'op': 'sendSyncroReportFile', 'machineid': global.machineInfo.id, 'filename': 'remote_data/shares/'+local_shares_files[k], 'number_of_parts': numbOfFiles, 'counter': k, 'base64part': base64part, 'hash': hash, 'time': now}));
+                                        global.client[origin_address].write(JSON.stringify({'op': 'sendSyncroReportFile', 'machineid': global.machineInfo.id, 'filename': 'remote_data/shares/'+local_shares_files[k], 'number_of_parts': numbOfFiles, 'counter': l, 'base64part': base64part, 'hash': hash, 'time': now}));
 
                                     }
 
@@ -285,6 +288,30 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
                         }
 
                     });
+
+                } else if ( data.op === 'returnSendSyncroReportFile' ) {
+
+                    var original_instructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf8'));
+                    var new_instructions = data.instructions;
+                    
+                    for (var i = 0; i < new_instructions.length; i++) {
+
+                        for (var j = 0; j < original_instructions.length; j++) {
+                            var exists = false;
+                            if ( original_instructions[j].op == new_instructions[i].op && original_instructions[j].path == new_instructions[i].path && original_instructions[j].machineid == new_instructions[i].machineid ) {
+                                exists = true;
+                                break;
+                            }
+                        }
+
+                        if ( !exists ) {
+                            original_instructions.push(new_instructions[i]);
+                        }
+
+                    }
+
+                    // Save the instructions to the file again
+                    fs.writeFileSync('local_data/instructions.json', JSON.stringify(original_instructions), 'utf8');
 
                 }
 

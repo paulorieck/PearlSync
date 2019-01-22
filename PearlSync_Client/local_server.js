@@ -1,5 +1,6 @@
 const net = require('net');
 const fs = require('fs');
+const unzip = new require('unzip');
 const pearlsync_tools = require('./pearlsync_tools');
 
 var received_files = [];
@@ -21,8 +22,6 @@ function checkReceivedFileSync() {
         if ( counter === number_of_parts ) {
 
             // The file is complete
-            console.log("Received a complete file! ==> "+received_files[i].filename);
-
             var fileOnBase64 = [];
             
             for (var j = 0; j < received_files.length; j++) {
@@ -39,8 +38,7 @@ function checkReceivedFileSync() {
 
             // Convert from string to file
             fs.writeFileSync(received_files[i].filename, completeBase64, {encoding: 'base64'});
-            console.log('File created');
-
+            
             // Remove the content from the file array
             for (var j = 0; j < received_files.length; j++) {
                 if ( received_files[i].filename === received_files[j].filename && received_files[i].time === received_files[j].time ) {
@@ -88,6 +86,7 @@ module.exports = {
                 }
             
                 console.log("confExists => "+confExists);
+
                 if ( !confExists ) {
                     global.socket[address] = null;
                 } else {
@@ -112,28 +111,75 @@ module.exports = {
                         received_files.push(data);
                         checkReceivedFileSync();
 
+                        // Get list of shares
+                        var share_list = JSON.parse(fs.readFileSync("local_data/sharelist.json", "utf8"));
+
                         // Process file and compare with local one
+                        console.log("data.filename: "+data.filename);
                         fs.createReadStream(data.filename)
-                            .pipe(unzip.Extract({path:'lremote_data/shares/'}).on('close', function () {
+                            .pipe(unzip.Extract({path:'remote_data/shares/'}).on('close', function () {
 
                                 var hash = data.hash;
-                                var remote_structure = JSON.parse(fs.readFileSync(data.filename.replace('.zip', '')));
+                                console.log("Remote file to extract content: "+data.filename.replace('.zip', ''));
+                                var remoteFileContent = fs.readFileSync(data.filename.replace('.zip', ''));
+                                console.log("remoteFileContent: "+remoteFileContent);
+
+                                fs.unlink(data.filename, (err) => {
+                                    if (err) {
+                                        throw "Error while deleting file "+data.filename+" ===> "+err;
+                                    } else {
+                                        console.log(data.filename+' was deleted');
+                                    }
+                                });
+
+                                fs.unlink(data.filename.replace('.zip', ''), (err) => {
+                                    if (err) {
+                                        throw "Error while deleting file "+data.filename.replace('.zip', '')+" ===> "+err;
+                                    } else {
+                                        console.log(data.filename.replace('.zip', '')+' was deleted');
+                                    }
+                                });
+
+                                var remote_structure = JSON.parse(remoteFileContent);
                                 
                                 fs.readdir('local_data/shares/', (err, local_shares_files) => {
 
-                                    for (var i = 0; i < share_list.length; i++) {
+                                    for (var j = 0; j < local_shares_files.length; j++) {
                                         
-                                        if ( share_list[i].indexOf(hash) != -1 ) {
+                                        //console.log("hash to compare: "+hash);
+                                        if ( local_shares_files[j].indexOf(hash) != -1 ) {
 
                                             // File found
-                                            console.log("Local file found to compare ==> "+share_list[i]);
-                                            
-                                            var local_structure = JSON.parse(fs.readFileSync(hare_list[i]));
+                                            fs.createReadStream('local_data/shares/'+local_shares_files[j])
+                                                .pipe(unzip.Extract({path:'local_data/shares/'}).on('close', function () {
 
-                                            var instructions = pearlsync_tools.compareStructures(remote_structure, local_structure, [], 'remote');
-                                            console.log("instructions: "+JSON.stringify(instructions));
+                                                    var localFileName = 'local_data/shares/'+local_shares_files[j].replace(".zip", "");
+                                                    var localFileContent = fs.readFileSync(localFileName);
+                                                    
+                                                    fs.unlink(localFileName, (err) => {
+                                                        if (err) {
+                                                            throw err;
+                                                        } else {
+                                                            console.log(localFileName+' was deleted');
+                                                        }
+                                                    });
 
-                                            global.socket[address].write(JSON.stringify({'op': 'returnSendSyncroReportFile', 'machineid': global.machineInfo.id, 'hash': hash}));
+                                                    var local_structure = JSON.parse(localFileContent);
+
+                                                    var relative_path = "";
+                                                    for (var k = 0; k < share_list.length; k++) {
+                                                        if ( share_list[k].hash === hash ) {
+                                                            relative_path = share_list[k].path;
+                                                            break;
+                                                        }
+                                                    }
+
+                                                    var instructions = pearlsync_tools.compareStructures(remote_structure.children, local_structure.children, [], 'remote', global.machineInfo.id, relative_path, hash);
+                                                    console.log("instructions: "+JSON.stringify(instructions));
+
+                                                    global.socket[address].write(JSON.stringify({'op': 'returnSendSyncroReportFile', 'machineid': global.machineInfo.id, 'hash': hash, 'instructions': instructions}));
+
+                                                }));
 
                                             break;
 
@@ -144,6 +190,14 @@ module.exports = {
                                 });
 
                             }));
+
+                    } else if ( 'op' === 'getFile' ) {
+
+
+
+                    } else if ( 'op' === 'sendFile' ) {
+
+
 
                     }
             
