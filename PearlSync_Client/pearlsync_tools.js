@@ -51,13 +51,15 @@ module.exports = {
         }
         console.log("Making request for getPunchDetailsFromIDsList...");
         global.client['server'].write(
+            "@IOT@"+
             JSON.stringify({
                 "op": "getPunchDetailsFromIDsList",
                 "list": machinesids_list,
                 'machineid': global.machineInfo.id,
                 'hostname': global.machineInfo.hostname,
                 'local_ip': global.machineInfo.local_ip
-            }));
+            })+
+            "@EOT@");
     
         global.mainWindow.webContents.executeJavaScript("loadShareList("+JSON.stringify(data.data)+");");
         
@@ -88,7 +90,7 @@ module.exports = {
 
         var post_data = {'op': 'getSharePairs', 'data': data, 'machineid': global.machineInfo.id, 'hostname': global.machineInfo.hostname, 'local_ip': global.machineInfo.local_ip};
         if ( global.client['server'].readyState !== "closed" ) {
-            global.client['server'].write(JSON.stringify(post_data));
+            global.client['server'].write("@IOT@"+JSON.stringify(post_data)+"@EOT@");
         } else {
             setTimeout(function () {
                 this.executeGetShareList(data);
@@ -133,9 +135,9 @@ module.exports = {
                 } else if ( changed ) {
                     if ( type == 'local' ) {
                         instructions.push({'op': 'change', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
-                    } else if ( type == 'remote' ) {
+                    } /*else if ( type == 'remote' ) {
                         instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
-                    }
+                    }*/
                 }
 
             }
@@ -172,6 +174,75 @@ module.exports = {
     
         return instructions;
     
+    },
+
+    checkReceivedFileSync: function () {
+
+        for (var i = 0; i < global.received_files.length; i++) {
+    
+            var numbOfFiles = global.received_files[i].numbOfFiles;
+    
+            var counter = 0;
+    
+            // Check if file is complete
+            for (var j = 0; j < global.received_files.length; j++) {
+                if ( global.received_files[i].filename === global.received_files[j].filename && global.received_files[i].time === global.received_files[j].time ) {
+                    counter++;
+                }
+            }
+    
+            if ( counter === (numbOfFiles-1) ) {
+
+                console.log()
+    
+                // The file is complete
+                var fileOnBase64 = [];
+                
+                for (var j = 0; j < global.received_files.length; j++) {
+                    if ( global.received_files[i].filename === global.received_files[j].filename && global.received_files[i].time === global.received_files[j].time ) {
+                        fileOnBase64[global.received_files[i].counter] = global.received_files[i].base64part;
+                    }
+                }
+    
+                // Mount string
+                var completeBase64 = "";
+                for (var j = 0; j < numbOfFiles; j++) {
+                    completeBase64 = completeBase64 + fileOnBase64[j];
+                }
+    
+                // Convert from string to file
+                if ( global.received_files[i].op === 'sendSyncroReportFile' ) {
+                    
+                    fs.writeFileSync(global.received_files[i].filename, completeBase64, {encoding: 'base64'});
+                
+                } else if ( global.received_files[i].op === 'sendFile' || global.received_files[i].op === 'returnGetFile' ) {
+    
+                    var relative_path = "";
+
+                    var share_list = JSON.parse(fs.readFileSync('local_data/sharelist.json', 'utf8'));
+                    for (var j = 0; j < share_list.length; j++) {
+                        if ( share_list[j].hash === global.received_files[i].hash ) {
+                            relative_path = share_list[j].path;
+                            break;
+                        }
+                    }
+    
+                    console.log("Path to store new file: #"+relative_path+"#"+global.received_files[i].filename+"#");
+                    fs.writeFileSync(relative_path+global.received_files[i].filename, completeBase64, {encoding: 'base64'});
+    
+                }
+                
+                // Remove the content from the file array
+                for (var j = 0; j < global.received_files.length; j++) {
+                    if ( global.received_files[i].op === global.received_files[j].op && global.received_files[i].filename === global.received_files[j].filename && global.received_files[i].time === global.received_files[j].time ) {
+                        global.received_files.splice(j, 1);
+                    }
+                }
+                
+            }
+    
+        }
+
     }
 
 }

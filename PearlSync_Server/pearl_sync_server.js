@@ -94,6 +94,10 @@ function Connects (address) {
 
 	socket[address].on('data', function (data) {
 
+		data = data+"";
+
+		data = data.replace("@IOT@", '').replace("@EOT@", '');
+
 		console.log("received data => "+data+"\n");
 
 		data = JSON.parse(data);
@@ -110,12 +114,14 @@ function Connects (address) {
 			
 			shares_db.put({"_id": data.hash, clients: [{"machineid": data.machineid, "hostname": data.hostname}]});
 			socket[address].write(
+				"@IOT@"+
 				JSON.stringify({
 					'op': 'returnSaveNewShare',
 					'result': 'success',
 					'hash': data.hash,
 					'path': data.path
-				}));
+				})+
+				"@EOT@");
 
 		} else if ( data.op === 'importNewShare' ) {
 
@@ -125,12 +131,14 @@ function Connects (address) {
 					console.log("tempClients before write to db ====> "+JSON.stringify(doc2.clients))
 					shares_db.put(doc2);
 					socket[address].write(
+						"@IOT@"+
 						JSON.stringify({
 							'op': 'returnSaveNewShare',
 							'result': 'success',
 							'hash': doc1.share_hash,
 							'path': data.path
-						}));
+						})+
+						"@EOT@");
 				});
 			});
 
@@ -155,7 +163,7 @@ function Connects (address) {
 
 			var i1 = setInterval(function () {
 				if ( counter === data.data.length ) {
-					socket[address].write(JSON.stringify({'op': 'returnGetSharePairs', 'data': returnObj}));
+					socket[address].write("@IOT@"+JSON.stringify({'op': 'returnGetSharePairs', 'data': returnObj})+"@EOT@");
 					clearInterval(i1);
 				}
 			}, 100);
@@ -165,12 +173,14 @@ function Connects (address) {
 			var timeout = (new Date().getTime());
 			invitations_db.put({'_id': data.id, 'share_hash': data.share_hash, 'timeout': timeout});
 			socket[address].write(
+				"@IOT@"+
 				JSON.stringify({
 					'op': 'returnShareInvitation',
 					'share_invitation_id': data.id,
 					'timeout': timeout,
 					'share_hash': data.share_hash
-				}));
+				})+
+				"@EOT@");
 
 		} else if ( data.op === 'getPunchConfigFromIP' ) {
 
@@ -193,6 +203,7 @@ function Connects (address) {
 			}
 
 			socket[address].write(
+				"@IOT@"+
 				JSON.stringify({
 					'op': 'returnGetPunchConfigFromIP',
 					'hostname': hostname,
@@ -202,7 +213,8 @@ function Connects (address) {
 					'ip': ip,
 					'port': port,
 					'local_ip': local_ip
-				}));
+				})+
+				"@EOT@");
 
 		} else if ( data.op === 'getPunchDetailsFromIDsList' ) {
 
@@ -219,23 +231,25 @@ function Connects (address) {
 			}
 
 			socket[address].write(
+				"@IOT@"+
 				JSON.stringify({
 					'op': 'returnGetPunchDetailsFromIDsList',
 					'data': machines_list,
 					'originip': socket[address].remoteAddress.replace("::ffff:", ""),
 					'originport': socket[address].remotePort
-				}));
+				})+
+				"@EOT@");
 
 		} else if ( data.op === 'sendPunchRequest' ) {
 
 			var destiny_address = data.data.punchDestinyIP+":"+data.data.punchDestinyPort;
 			console.log('sendPunchRequest ==> destiny_address: '+destiny_address);
-			socket[destiny_address].write(JSON.stringify({'op': 'forwardPunchRequest', 'data': data.data}));
+			socket[destiny_address].write("@IOT@"+JSON.stringify({'op': 'forwardPunchRequest', 'data': data.data})+"@EOT@");
 
 		} else if ( data.op === 'returnForwardPunchRequest' ) {
 
 			var origin_address = data.data.punchOriginIP+":"+data.data.punchOriginPort;
-			socket[origin_address].write(JSON.stringify({'op': 'returnSendPunchRequest', 'data': data.data}));
+			socket[origin_address].write("@IOT@"+JSON.stringify({'op': 'returnSendPunchRequest', 'data': data.data})+"@EOT@");
 
 		}
 

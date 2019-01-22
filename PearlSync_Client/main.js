@@ -3,6 +3,8 @@ global.machineInfo = null;
 global.connectionsConfs = [];
 global.socket = [];
 global.instructionsBeingProcessed = false;
+global.transaction_syze = 100*1024; // 100 Kbytes
+global.received_files = [];
 
 const fs = require('fs');
 const path = require('path');
@@ -352,6 +354,7 @@ ipcMain.on('createNewShare', (event, path) => {
 
     // ------- Register new share on server share list --------------
     global.client['server'].write(
+        "@IOT@"+
         JSON.stringify({
             'op': 'postNewShare',
             'hash': hash,
@@ -359,7 +362,8 @@ ipcMain.on('createNewShare', (event, path) => {
             'hostname': global.machineInfo.hostname,
             'path': path,
             'local_ip': global.machineInfo.local_ip
-        }));
+        })+
+        "@EOT@");
 
 });
 
@@ -369,6 +373,7 @@ ipcMain.on('importNewShare', (event, data) => {
 
     // ------- Register new share on server share list --------------
     global.client['server'].write(
+        "@IOT@"+
         JSON.stringify({
             'op': 'importNewShare',
             'invitation_hash': data.invitation_hash,
@@ -377,7 +382,8 @@ ipcMain.on('importNewShare', (event, data) => {
             "path": data.folderpath,
             'hostname': global.machineInfo.hostname,
             'local_ip': global.machineInfo.local_ip
-        }));
+        })+
+        "@EOT@");
 
 });
 
@@ -386,6 +392,7 @@ function tryPunchConnection(data, punchConf) {
     punch_time = 0;
 
     global.client['server'].write(
+        "@IOT@"+
         JSON.stringify({
             'op': 'sendPunchRequest',
             'machineid': global.machineInfo.id,
@@ -397,7 +404,8 @@ function tryPunchConnection(data, punchConf) {
                 'punchDestinyPort': punchConf
             },
             'local_ip': global.machineInfo.local_ip
-        }));
+        })+
+        "@EOT@");
 
 };
 
@@ -463,6 +471,7 @@ ipcMain.on('getShareList', (event, variable) => {
 ipcMain.on('saveShareInvitation', (event, variable) => {
     var id_hash = md5(global.machineInfo.id+(new Date()).getTime()+variable);
     global.client['server'].write(
+        "@IOT@"+
         JSON.stringify({
             'op': 'saveShareInvitation',
             'id': id_hash,
@@ -470,7 +479,8 @@ ipcMain.on('saveShareInvitation', (event, variable) => {
             'machineid': global.machineInfo.id,
             'hostname': global.machineInfo.hostname,
             'local_ip': global.machineInfo.local_ip
-        }));
+        })+
+        "@EOT@");
 });
 
 function dirTree(filename) {
@@ -504,20 +514,28 @@ function sendInstructionsToPairs(instructions) {
         var address_key = "";
         for (var j = 0; j < global.connectionsConfs.length; j++) {
             if ( instructions[i].machineid === connectionsConfs[j].machineid ) {
-                address_key = global.connectionsConfs[i].ip+":"+global.connectionsConfs[i].port;
+                address_key = global.connectionsConfs[j].ip+":"+global.connectionsConfs[j].port;
                 break;
             }
         }
 
-        if ( address_key !== "" ) {
+        if ( address_key !== "" && global.client[address_key] != null ) {
 
             var now = (new Date()).getTime();
 
             if ( instructions[i].op === 'get' ) {
 
-                global.client[origin_address].write(JSON.stringify({'op': 'getFile', 'machineid': global.machineInfo.id, 'filename': instructions[i].path, 'hash': instructions[i].shareid, 'time': now}));
+                global.client[address_key].write(
+                    "@IOT@"+
+                    JSON.stringify({
+                        'op': 'getFile',
+                        'machineid': global.machineInfo.id,
+                        'filename': instructions[i].path,
+                        'hash': instructions[i].shareid,
+                        'time': now})+
+                    "@EOT@");
 
-            } else if ( instructions[i].op === 'send' ) {
+            }/* else if ( instructions[i].op === 'send' ) {
 
                 // Get relative path
                 var relative_path = "";
@@ -530,27 +548,38 @@ function sendInstructionsToPairs(instructions) {
                 }
 
                 // Open file to send
-                var base64 = (fs.readFileSync(relative_path+instructions[i].path)).toString('base64');
+                var base64 = (fs.readFileSync(instructions[i].path)).toString('base64');
 
                 var len = base64.length;
-                var numbOfFiles = Math.ceil(len/1024);
+                var numbOfFiles = Math.ceil(len/global.transaction_syze);
+
+                console.log("File to send: "+relative_path+instructions[i].path);
 
                 for (var j = 0; j < numbOfFiles; j++) {
 
-                    console.log("File to send: "+relative_path+instructions[i].path);
-
-                    var init = j*1024*512;
-                    var end = (j+1)*1024*512;
+                    var init = j*global.transaction_syze;
+                    var end = (j+1)*global.transaction_syze;
                     if ( end > len ) {
                         end = len;
                     }
 
                     var base64part = base64.substring(init, end);
-                    global.client[origin_address].write(JSON.stringify({'op': 'sendFile', 'machineid': global.machineInfo.id, 'filename': instructions[i].path, 'number_of_parts': numbOfFiles, 'counter': j, 'base64part': base64part, 'hash': instructions[i].shareid, 'time': now}));
+                    global.client[address_key].write(
+                        "@IOT@"+
+                        JSON.stringify({
+                            'op': 'sendFile', 
+                            'machineid': global.machineInfo.id, 
+                            'filename': instructions[i].path, 
+                            'number_of_parts': numbOfFiles, 
+                            'counter': j, 
+                            'base64part': base64part, 
+                            'hash': instructions[i].shareid, 
+                            'time': now})+
+                        "@EOT@");
 
                 }
 
-            }
+            }*/
 
         }
 
