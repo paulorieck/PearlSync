@@ -105,71 +105,81 @@ module.exports = {
         console.log("currentOrLocalStructure => "+JSON.stringify(currentOrLocalStructure));
 
         for (var i = 0; i < oldOrRemoteStructure.length; i++) {
+ 
+            if ( oldOrRemoteStructure[i] != null ) {
+                if ( oldOrRemoteStructure[i].path.indexOf(".DS_Store") === -1 ) {
 
-            if ( oldOrRemoteStructure[i].path.indexOf(".DS_Store") === -1 ) {
-
-                var removed = true;
-                var changed = false;
-                for (var j = 0; j < currentOrLocalStructure.length; j++) {
-                    if ( oldOrRemoteStructure[i].path === currentOrLocalStructure[j].path && oldOrRemoteStructure[i].type === currentOrLocalStructure[j].type ) {
-                        removed = false;
-                        if ( oldOrRemoteStructure[i].type === 'folder' ) {
-                            this.compareStructures(oldOrRemoteStructure[i].children, currentOrLocalStructure[j].children, instructions, type, machineid, relative_path, shareid);
-                        } else if ( oldOrRemoteStructure[i].type === 'file' ) {
-                            if ( oldOrRemoteStructure[i].last_modification !== currentOrLocalStructure[j].last_modification ) {
-                                changed = true;
+                    var removed = true;
+                    var changed = false;
+                    for (var j = 0; j < currentOrLocalStructure.length; j++) {
+                        if ( currentOrLocalStructure[j] != null ) {
+                            if ( oldOrRemoteStructure[i].path === currentOrLocalStructure[j].path && oldOrRemoteStructure[i].type === currentOrLocalStructure[j].type ) {
+                                removed = false;
+                                if ( oldOrRemoteStructure[i].type === 'folder' ) {
+                                    this.compareStructures(oldOrRemoteStructure[i].children, currentOrLocalStructure[j].children, instructions, type, machineid, relative_path, shareid);
+                                } else if ( oldOrRemoteStructure[i].type === 'file' ) {
+                                    if ( oldOrRemoteStructure[i].last_modification !== currentOrLocalStructure[j].last_modification ) {
+                                        changed = true;
+                                    }
+                                }
+                                break;
                             }
                         }
-                        break;
                     }
-                }
 
-                var path = oldOrRemoteStructure[i].path.replace(relative_path, '');
-        
-                if ( removed ) {
-                    if ( type == 'local' ) {
-                        instructions.push({'op': 'remove', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
-                    } else if ( type == 'remote' ) {
-                        instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                    var path = oldOrRemoteStructure[i].path.replace(relative_path, '');
+            
+                    if ( removed ) {
+                        if ( type == 'local' ) {
+                            instructions.push({'op': 'remove', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
+                        } else if ( type == 'remote' ) {
+                            instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                        }
+                    } else if ( changed ) {
+                        if ( type == 'local' ) {
+                            instructions.push({'op': 'change', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
+                        } /*else if ( type == 'remote' ) {
+                            instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                        }*/
                     }
-                } else if ( changed ) {
-                    if ( type == 'local' ) {
-                        instructions.push({'op': 'change', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
-                    } /*else if ( type == 'remote' ) {
-                        instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
-                    }*/
-                }
 
+                }
             }
             
         }
     
         for (var i = 0; i < currentOrLocalStructure.length; i++) {
 
-            if ( currentOrLocalStructure[i].path.indexOf(".DS_Store") === -1 ) {
+            if ( currentOrLocalStructure[i] != null ) {
 
-                var added = true;
-                for (var j = 0; j < oldOrRemoteStructure.length; j++) {
-                    if ( oldOrRemoteStructure[j].path === currentOrLocalStructure[i].path && oldOrRemoteStructure[j].type === currentOrLocalStructure[i].type ) {
-                        added = false;
-                        break;
+                if ( currentOrLocalStructure[i].path.indexOf(".DS_Store") === -1 ) {
+
+                    var added = true;
+                    for (var j = 0; j < oldOrRemoteStructure.length; j++) {
+                        if ( oldOrRemoteStructure[j] != null ) {
+                            if ( oldOrRemoteStructure[j].path === currentOrLocalStructure[i].path && oldOrRemoteStructure[j].type === currentOrLocalStructure[i].type ) {
+                                added = false;
+                                break;
+                            }
+                        }
                     }
-                }
-        
-                if ( added ) {
-
-                    console.log("currentOrLocalStructure["+i+"].path: "+currentOrLocalStructure[i].path+", relative_path: "+relative_path);
-                    var path = currentOrLocalStructure[i].path.replace(relative_path, '');
-
-                    if ( type == 'local' ) {
-                        instructions.push({'op': 'add', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'shareid': shareid});
-                    } else if ( type == 'remote' ) {
-                        instructions.push({'op': 'get', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+            
+                    if ( added ) {
+    
+                        console.log("currentOrLocalStructure["+i+"].path: "+currentOrLocalStructure[i].path+", relative_path: "+relative_path);
+                        var path = currentOrLocalStructure[i].path.replace(relative_path, '');
+    
+                        if ( type == 'local' ) {
+                            instructions.push({'op': 'add', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'shareid': shareid});
+                        } else if ( type == 'remote' ) {
+                            instructions.push({'op': 'get', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                        }
                     }
+    
                 }
 
             }
-    
+
         }
     
         return instructions;
@@ -177,6 +187,8 @@ module.exports = {
     },
 
     checkReceivedFileSync: function () {
+
+        var complete = false;
 
         for (var i = 0; i < global.received_files.length; i++) {
     
@@ -191,9 +203,10 @@ module.exports = {
                 }
             }
     
-            if ( counter === (numbOfFiles-1) ) {
+            console.log("counter: "+counter+", numbOfFiles: "+numbOfFiles);
+            if ( counter === numbOfFiles ) {
 
-                console.log()
+                complete = true;
     
                 // The file is complete
                 var fileOnBase64 = [];
@@ -213,6 +226,7 @@ module.exports = {
                 // Convert from string to file
                 if ( global.received_files[i].op === 'sendSyncroReportFile' ) {
                     
+                    console.log("global.received_files["+i+"].filename: "+global.received_files[i].filename);
                     fs.writeFileSync(global.received_files[i].filename, completeBase64, {encoding: 'base64'});
                 
                 } else if ( global.received_files[i].op === 'sendFile' || global.received_files[i].op === 'returnGetFile' ) {
@@ -226,12 +240,23 @@ module.exports = {
                             break;
                         }
                     }
-    
-                    console.log("Path to store new file: #"+relative_path+"#"+global.received_files[i].filename+"#");
+
+                    global.watch_suppress_list.push(global.received_files[i].filename);
+
                     fs.writeFileSync(relative_path+global.received_files[i].filename, completeBase64, {encoding: 'base64'});
     
                 }
                 
+                // Remove instruction
+                var instructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf8'));
+                for (var j = 0; j < instructions.length; j++) {
+                    if ( instructions[j].path === global.received_files[i].filename && instructions[j].shareid === global.received_files[i].hash ) {
+                        console.log("Removing instruction +> "+JSON.stringify(instructions));
+                        instructions.splice(j, 1);
+                    }
+                }
+                fs.writeFileSync('local_data/instructions.json', JSON.stringify(instructions), 'utf8');
+
                 // Remove the content from the file array
                 for (var j = 0; j < global.received_files.length; j++) {
                     if ( global.received_files[i].op === global.received_files[j].op && global.received_files[i].filename === global.received_files[j].filename && global.received_files[i].time === global.received_files[j].time ) {
@@ -242,6 +267,8 @@ module.exports = {
             }
     
         }
+
+        return complete;
 
     }
 

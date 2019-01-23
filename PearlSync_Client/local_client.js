@@ -4,6 +4,23 @@ const fs = require('fs');
 
 var clientBuffer = [];
 
+function sendShareFilesPartsToPartners(counter, numbOfFiles, now, hash, filename, len, origin_address) {
+
+    var init = counter*global.transaction_syze;
+    var end = (counter+1)*global.transaction_syze;
+    if ( end > len ) {
+        end = len;
+    }
+
+    var base64part = global.base64[origin_address].substring(init, end);
+    global.client[origin_address].write("@IOT@"+JSON.stringify({'op': 'sendSyncroReportFile', 'machineid': global.machineInfo.id, 'filename': filename, 'numbOfFiles': numbOfFiles, 'counter': counter, 'base64part': base64part, 'hash': hash, 'time': now})+"@EOT@");
+
+    if ( (counter+1) < numbOfFiles ) {
+        sendShareFilesPartsToPartners((counter+1), numbOfFiles, now, hash, 'remote_data/shares/'+local_shares_files[k], len, origin_address);
+    }
+    
+}
+
 module.exports = {
 
     startConnectionToServer: function (server_ip, server_default_port) {
@@ -43,8 +60,6 @@ module.exports = {
 
         global.client['server'].on('data', function(data) {
 
-            console.log("rawData: "+data);
-
             data = data+"";
 
             var complete = false;
@@ -62,10 +77,8 @@ module.exports = {
             if ( complete ) {
 
                 data = data.replace('@IOT@', '').replace('@EOT@', '');
+                console.log("Received data [client from server] => "+data);
 
-                if ( data.length < 1000 ) {
-                    console.log('Received: ' + data);
-                }
                 data = JSON.parse(data);
             
                 if ( data.op === 'returnSaveNewShare' ) {
@@ -250,8 +263,6 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
 
         global.client[origin_address].on('data', function(data) {
 
-            //console.log("Raw data: [local client] "+data);
-
             data = data+"";
 
             var complete = false;
@@ -271,8 +282,8 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
             if ( complete ) {
 
                 data = data.replace('@IOT@', '').replace('@EOT@', '');
+                console.log("Received data [local client]: "+data);
 
-                console.log('Received: ' + data);
                 data = JSON.parse(data);
 
                 var confExists = false;
@@ -285,7 +296,6 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
                     }
                 }
 
-                console.log("confExists: "+confExists);
                 if ( !confExists ) {
                     global.socket[address] = null;
                 } else {
@@ -300,6 +310,7 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
                         
                             // Navigate through shares of this connection
                             var shares = global.connectionsConfs[i].shares;
+
                             for (var j = 0; j < shares.length; j++ ) {
 
                                 for (var k = 0; k < local_shares_files.length; k++ ) {
@@ -310,30 +321,16 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
                                         console.log("Transmiting file "+local_shares_files[k]+" to the remote partner connection.");
                                         
                                         //send a file to the server
-                                        var base64 = (fs.readFileSync('local_data/shares/'+local_shares_files[k])).toString('base64');
+                                        global.base64[origin_address] = (fs.readFileSync('local_data/shares/'+local_shares_files[k])).toString('base64');
 
-                                        var len = base64.length;
+                                        var len = global.base64[origin_address].length;
                                         var numbOfFiles = Math.ceil(len/global.transaction_syze);
 
                                         var now = (new Date()).getTime();
 
                                         var hash = local_shares_files[k].substring(0, local_shares_files[k].indexOf("_"));
-                                        console.log("hash to send: "+hash);
 
-                                        console.log("File to send: "+local_shares_files[k]);
-
-                                        for (var l = 0; l < numbOfFiles; l++) {
-
-                                            var init = l*global.transaction_syze;
-                                            var end = (l+1)*global.transaction_syze;
-                                            if ( end > len ) {
-                                                end = len;
-                                            }
-
-                                            var base64part = base64.substring(init, end);
-                                            global.client[origin_address].write("@IOT@"+JSON.stringify({'op': 'sendSyncroReportFile', 'machineid': global.machineInfo.id, 'filename': 'remote_data/shares/'+local_shares_files[k], 'numbOfFiles': numbOfFiles, 'counter': l, 'base64part': base64part, 'hash': hash, 'time': now})+"@EOT@");
-
-                                        }
+                                        sendShareFilesPartsToPartners(0, numbOfFiles, now, hash, 'remote_data/shares/'+local_shares_files[k], len, origin_address);
 
                                     }
 
@@ -368,8 +365,6 @@ function tryLocalConnection(connectionConf, origin_address, punchConf, data, cou
                         fs.writeFileSync('local_data/instructions.json', JSON.stringify(original_instructions), 'utf8');
 
                     } else if ( data.op === 'returnGetFile' ) {
-
-                        console.log("received returnGetFile ==> data.counter: "+data.counter+", data.numbOfFiles: "+data.numbOfFiles+", data.filename: "+data.filename+", data.hash: "+data.hash+", data.time: "+data.time+", data.address: "+data.address+", data.len: "+data.len);
 
                         global.received_files.push(data);
                         pearlsync_tools.checkReceivedFileSync();

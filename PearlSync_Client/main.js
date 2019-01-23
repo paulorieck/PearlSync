@@ -3,8 +3,10 @@ global.machineInfo = null;
 global.connectionsConfs = [];
 global.socket = [];
 global.instructionsBeingProcessed = false;
-global.transaction_syze = 100*1024; // 100 Kbytes
+global.transaction_syze = 1024*1024; // 1 Mbyte
 global.received_files = [];
+global.watch_suppress_list = [];
+global.base64 = [];
 
 const fs = require('fs');
 const path = require('path');
@@ -182,7 +184,7 @@ function startSharesProcessing() {
             var sharelist_obj = {"path": share_list[i].path, "hash": share_list[i].hash};
             fs.createReadStream('local_data/shares/'+oldest_filename+'.zip')
                 .pipe(unzip.Extract({path:'local_data/shares/'}).on('close', function () {
-                    sharesProcessingContinuation(oldest_filename, sharelist_obj);
+                    sharesProcessingContinuation(oldest_filename, sharelist_obj, dates.length);
                 }));
 
             console.log("Starting connection to server!");
@@ -194,7 +196,7 @@ function startSharesProcessing() {
 
 }
 
-function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
+function sharesProcessingContinuation(oldest_filename, sharelist_obj, files_length) {
 
     var oldest_structure = JSON.parse(fs.readFileSync('local_data/shares/'+oldest_filename, 'utf8'));
         
@@ -232,21 +234,38 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
             type = "file";
         }
 
-        oldInstructions.push({'op': op, 'path': name, 'execution': 0, 'type': type});
+        var suppress = false;
 
-        // Update instructions file
-        fs.writeFile("local_data/instructions.json", JSON.stringify(oldInstructions), function(err) {
-            if (err) {
-                return console.log(err);
-            } else {
-                if ( !global.instructionsBeingProcessed ) {
-                    global.instructionsBeingProcessed = true;
-                    setTimeout(function() {
-                        sendInstructionsToPairs(oldInstructions);
-                    }, 10000);
-                }
+        // Checks if the file is inside the receiving list
+        for (var i = 0; i < global.watch_suppress_list.length; i++) {
+            if ( name === sharelist_obj.path+global.watch_suppress_list[i] ) {
+                console.log("Removing from watch_suppress_list +> "+global.watch_suppress_list[i]);
+                global.watch_suppress_list.splice(i, 1);
+                suppress = true;
+                break;
             }
-        });
+        }
+        console.log("global.watch_suppress_list: "+JSON.stringify(global.watch_suppress_list));
+
+        if ( !suppress ) {
+
+            oldInstructions.push({'op': op, 'path': name, 'execution': 0, 'type': type});
+
+            // Update instructions file
+            fs.writeFile("local_data/instructions.json", JSON.stringify(oldInstructions), function(err) {
+                if (err) {
+                    return console.log(err);
+                } else {
+                    if ( !global.instructionsBeingProcessed ) {
+                        global.instructionsBeingProcessed = true;
+                        setTimeout(function() {
+                            sendInstructionsToPairs(oldInstructions);
+                        }, 10000);
+                    }
+                }
+            });
+
+        }
 
     });
 
@@ -275,14 +294,18 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj) {
         }
     });
 
-    // When processing is done, delete oldest share structure
-    fs.unlink('local_data/shares/'+oldest_filename+".zip", (err) => {
-        if (err) {
-            throw err;
-        } else {
-            console.log('local_data/shares/'+oldest_filename+'.zip was deleted');
-        }
-    });
+    if ( files_length >= 1 ) {
+
+        // When processing is done, delete oldest share structure
+        fs.unlink('local_data/shares/'+oldest_filename+".zip", (err) => {
+            if (err) {
+                throw err;
+            } else {
+                console.log('local_data/shares/'+oldest_filename+'.zip was deleted');
+            }
+        });
+
+    }
 
 }
 
@@ -413,7 +436,7 @@ function processFolderStructure(path, hash) {
                 
     var ldate = (new Date()).getTime();
 
-    var folderStructure = dirTree(path);
+    var folderStructure = dirTree(path, path);
     var folderStructureStr = JSON.stringify(folderStructure);
 
     fs.writeFileSync('local_data/shares/'+hash+"_"+ldate+'.json', folderStructureStr);
@@ -483,24 +506,28 @@ ipcMain.on('saveShareInvitation', (event, variable) => {
         "@EOT@");
 });
 
-function dirTree(filename) {
+function dirTree(filename, original_path) {
 
     var stats = fs.lstatSync(filename);
-    var info = {path: filename, name: path.basename(filename)};
+    if ( filename.indexOf(".DS_Store") === -1 ) {
 
-    if (stats.isDirectory()) {
-        info.type = "folder";
-        info.children = fs.readdirSync(filename).map(function(child) {
-            return dirTree(filename + '/' + child);
-        });
-    } else {
-        // Assuming it's a file. In real life it could be a symlink or
-        // something else!
-        info.type = "file";
-        info.last_modification = stats.mtimeMs;
+        var info = {path: filename.replace(original_path, ''), name: path.basename(filename)};
+
+        if (stats.isDirectory()) {
+            info.type = "folder";
+            info.children = fs.readdirSync(filename).map(function(child) {
+                return dirTree(filename+'/'+child, original_path);
+            });
+        } else {
+            // Assuming it's a file. In real life it could be a symlink or
+            // something else!
+            info.type = "file";
+            info.last_modification = stats.mtimeMs;
+        }
+
+        return info;
+
     }
-
-    return info;
 
 }
 

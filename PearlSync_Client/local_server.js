@@ -4,12 +4,8 @@ const unzip = new require('unzip');
 const pearlsync_tools = require('./pearlsync_tools');
 
 var serverBuffer = [];
-var base64 = [];
 
 function sendFileToClient(counter, numbOfFiles, filename, hash, now, address, len) {
-
-    console.log("--------- sendFileToClient ["+counter+"] ---------------");
-    console.log("numbOfFiles: "+numbOfFiles+", filename: "+filename+", hash: "+hash+", now: "+now+", address: "+address+", len: "+len);
 
     if ( counter < numbOfFiles ) {
 
@@ -19,13 +15,13 @@ function sendFileToClient(counter, numbOfFiles, filename, hash, now, address, le
             end = len;
         }
 
-        var base64part = base64[address].substring(init, end);
+        var base64part = global.base64[address].substring(init, end);
         var obj = {'op': 'returnGetFile', 'machineid': global.machineInfo.id, 'filename': filename, 'numbOfFiles': numbOfFiles, 'counter': counter, 'base64part': base64part, 'hash': hash, 'time': now, 'address': address, 'len': len};
         global.socket[address].write("@IOT@"+JSON.stringify(obj)+"@EOT@");
 
     } else {
 
-        base64[address] = "";
+        global.base64[address] = "";
 
     }
 
@@ -68,7 +64,7 @@ module.exports = {
                 if ( complete ) {
 
                     data = data.replace('@IOT@', '').replace('@EOT@', '');
-                    console.log("received data => "+data+"\n");
+                    console.log("Received data [local server] => "+data);
 
                     data = JSON.parse(data);
 
@@ -80,8 +76,6 @@ module.exports = {
                             break;
                         }
                     }
-                
-                    console.log("confExists => "+confExists);
 
                     if ( !confExists ) {
                         global.socket[address] = null;
@@ -105,87 +99,88 @@ module.exports = {
                         } else if ( data.op === 'sendSyncroReportFile' ) {
 
                             global.received_files.push(data);
-                            pearlsync_tools.checkReceivedFileSync();
+                            var complete = pearlsync_tools.checkReceivedFileSync();
+                            console.log("complete: "+complete);
 
-                            // Get list of shares
-                            var share_list = JSON.parse(fs.readFileSync("local_data/sharelist.json", "utf8"));
+                            if ( complete ) {
 
-                            // Process file and compare with local one
-                            console.log("data.filename: "+data.filename);
-                            fs.createReadStream(data.filename)
-                                .pipe(unzip.Extract({path:'remote_data/shares/'}).on('close', function () {
+                                // Get list of shares
+                                var share_list = JSON.parse(fs.readFileSync("local_data/sharelist.json", "utf8"));
 
-                                    var hash = data.hash;
-                                    console.log("Remote file to extract content: "+data.filename.replace('.zip', ''));
-                                    var remoteFileContent = fs.readFileSync(data.filename.replace('.zip', ''));
-                                    console.log("remoteFileContent: "+remoteFileContent);
+                                // Process file and compare with local one
+                                fs.createReadStream(data.filename)
+                                    .pipe(unzip.Extract({path:'remote_data/shares/'}).on('close', function () {
 
-                                    fs.unlink(data.filename, (err) => {
-                                        if (err) {
-                                            throw "Error while deleting file "+data.filename+" ===> "+err;
-                                        } else {
-                                            console.log(data.filename+' was deleted');
-                                        }
-                                    });
+                                        var hash = data.hash;
+                                        var remoteFileContent = fs.readFileSync(data.filename.replace('.zip', ''));
 
-                                    fs.unlink(data.filename.replace('.zip', ''), (err) => {
-                                        if (err) {
-                                            throw "Error while deleting file "+data.filename.replace('.zip', '')+" ===> "+err;
-                                        } else {
-                                            console.log(data.filename.replace('.zip', '')+' was deleted');
-                                        }
-                                    });
+                                        fs.unlink(data.filename, (err) => {
+                                            if (err) {
+                                                throw "Error while deleting file "+data.filename+" ===> "+err;
+                                            } else {
+                                                console.log(data.filename+' was deleted');
+                                            }
+                                        });
 
-                                    var remote_structure = JSON.parse(remoteFileContent);
-                                    
-                                    fs.readdir('local_data/shares/', (err, local_shares_files) => {
+                                        fs.unlink(data.filename.replace('.zip', ''), (err) => {
+                                            if (err) {
+                                                throw "Error while deleting file "+data.filename.replace('.zip', '')+" ===> "+err;
+                                            } else {
+                                                console.log(data.filename.replace('.zip', '')+' was deleted');
+                                            }
+                                        });
 
-                                        for (var j = 0; j < local_shares_files.length; j++) {
-                                            
-                                            //console.log("hash to compare: "+hash);
-                                            if ( local_shares_files[j].indexOf(hash) != -1 ) {
+                                        var remote_structure = JSON.parse(remoteFileContent);
+                                        
+                                        fs.readdir('local_data/shares/', (err, local_shares_files) => {
 
-                                                // File found
-                                                fs.createReadStream('local_data/shares/'+local_shares_files[j])
-                                                    .pipe(unzip.Extract({path:'local_data/shares/'}).on('close', function () {
+                                            for (var j = 0; j < local_shares_files.length; j++) {
 
-                                                        var localFileName = 'local_data/shares/'+local_shares_files[j].replace(".zip", "");
-                                                        var localFileContent = fs.readFileSync(localFileName);
-                                                        
-                                                        fs.unlink(localFileName, (err) => {
-                                                            if (err) {
-                                                                throw err;
-                                                            } else {
-                                                                console.log(localFileName+' was deleted');
+                                                if ( local_shares_files[j].indexOf(hash) != -1 ) {
+
+                                                    // File found
+                                                    fs.createReadStream('local_data/shares/'+local_shares_files[j])
+                                                        .pipe(unzip.Extract({path:'local_data/shares/'}).on('close', function () {
+
+                                                            var localFileName = 'local_data/shares/'+local_shares_files[j].replace(".zip", "");
+                                                            var localFileContent = fs.readFileSync(localFileName);
+                                                            
+                                                            fs.unlink(localFileName, (err) => {
+                                                                if (err) {
+                                                                    throw err;
+                                                                } else {
+                                                                    console.log(localFileName+' was deleted');
+                                                                }
+                                                            });
+
+                                                            var local_structure = JSON.parse(localFileContent);
+
+                                                            var relative_path = "";
+                                                            for (var k = 0; k < share_list.length; k++) {
+                                                                if ( share_list[k].hash === hash ) {
+                                                                    relative_path = share_list[k].path;
+                                                                    break;
+                                                                }
                                                             }
-                                                        });
 
-                                                        var local_structure = JSON.parse(localFileContent);
+                                                            var instructions = pearlsync_tools.compareStructures(remote_structure.children, local_structure.children, [], 'remote', global.machineInfo.id, relative_path, hash);
+                                                            console.log("Instructions to return: "+JSON.stringify(instructions));
 
-                                                        var relative_path = "";
-                                                        for (var k = 0; k < share_list.length; k++) {
-                                                            if ( share_list[k].hash === hash ) {
-                                                                relative_path = share_list[k].path;
-                                                                break;
-                                                            }
-                                                        }
+                                                            global.socket[address].write("@IOT@"+JSON.stringify({'op': 'returnSendSyncroReportFile', 'machineid': global.machineInfo.id, 'hash': hash, 'instructions': instructions})+"@EOT@");
 
-                                                        var instructions = pearlsync_tools.compareStructures(remote_structure.children, local_structure.children, [], 'remote', global.machineInfo.id, relative_path, hash);
-                                                        console.log("instructions: "+JSON.stringify(instructions));
+                                                        }));
 
-                                                        global.socket[address].write("@IOT@"+JSON.stringify({'op': 'returnSendSyncroReportFile', 'machineid': global.machineInfo.id, 'hash': hash, 'instructions': instructions})+"@EOT@");
+                                                    break;
 
-                                                    }));
-
-                                                break;
+                                                }
 
                                             }
 
-                                        }
+                                        });
 
-                                    });
+                                    }));
 
-                                }));
+                            }
 
                         } else if ( data.op === 'getFile' ) {
 
@@ -200,9 +195,9 @@ module.exports = {
                             }
 
                             // Open file to send
-                            base64[address] = (fs.readFileSync(relative_path+data.filename)).toString('base64');
+                            global.base64[address] = (fs.readFileSync(relative_path+data.filename)).toString('base64');
 
-                            var len = base64[address].length;
+                            var len = global.base64[address].length;
                             var numbOfFiles = Math.ceil(len/global.transaction_syze);
 
                             var now = (new Date()).getTime();
@@ -216,7 +211,6 @@ module.exports = {
 
                         } else if ( data.op === 'transferConcluded' ) {
 
-                            console.log("data.counter: "+data.counter+", data.numbOfFiles: "+data.numbOfFiles+", data.filename: "+data.filename+", data.hash: "+data.hash+", data.time: "+data.time+", data.address: "+data.address+", data.len: "+data.len);
                             sendFileToClient(data.counter+1, data.numbOfFiles, data.filename, data.hash, data.time, data.address, data.len);
 
                         }
