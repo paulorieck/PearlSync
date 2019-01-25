@@ -5,7 +5,7 @@ const pearlsync_tools = require('./pearlsync_tools');
 
 var serverBuffer = [];
 
-function sendFileToClient(counter, numbOfFiles, filename, hash, now, address, len) {
+function sendFileToClient(counter, numbOfFiles, filename, hash, now, address, len, file_timestamp) {
 
     if ( counter < numbOfFiles ) {
 
@@ -16,7 +16,7 @@ function sendFileToClient(counter, numbOfFiles, filename, hash, now, address, le
         }
 
         var base64part = global.base64[address].substring(init, end);
-        var obj = {'op': 'returnGetFile', 'machineid': global.machineInfo.id, 'filename': filename, 'numbOfFiles': numbOfFiles, 'counter': counter, 'base64part': base64part, 'hash': hash, 'time': now, 'address': address, 'len': len};
+        var obj = {'op': 'returnGetFile', 'machineid': global.machineInfo.id, 'filename': filename, 'numbOfFiles': numbOfFiles, 'counter': counter, 'base64part': base64part, 'hash': hash, 'time': now, 'address': address, 'len': len, 'file_timestamp': file_timestamp};
         global.socket[address].write("@IOT@"+JSON.stringify(obj)+"@EOT@");
 
     } else {
@@ -52,7 +52,7 @@ module.exports = {
                 var complete = false;
                 if ( data.indexOf("@IOT") != -1 && data.indexOf("@EOT@") != -1 ) {
                     complete = true;
-                } else if ( data.indexOf("@IFT@") != -1  ) {
+                } else if ( data.indexOf("@IOT@") != -1  ) {
                     serverBuffer[address] = data;
                 } else if ( data.indexOf("@EOT@") != -1  ) {
                     complete = true;
@@ -60,11 +60,12 @@ module.exports = {
                 } else {
                     serverBuffer[address] = serverBuffer[address]+data;
                 }
-        
+                        
                 if ( complete ) {
 
-                    data = data.replace('@IOT@', '').replace('@EOT@', '');
-                    console.log("Received data [local server] => "+data);
+                    //console.log("Raw data: "+data);
+                    data = data.replace('@IOT@', '').replace('@EOT@', '').replace('undefined', '');
+                    //console.log("Received data [local server] => "+data);
 
                     data = JSON.parse(data);
 
@@ -202,17 +203,19 @@ module.exports = {
 
                             var now = (new Date()).getTime();
 
-                            sendFileToClient(0, numbOfFiles, data.filename, data.hash, now, address, len);
+                            sendFileToClient(0, numbOfFiles, data.filename, data.hash, now, address, len, data.file_timestamp);
                             
+                        } else if ( data.op === 'transferConcluded_GetFile' ) {
+
+                            sendFileToClient(data.counter+1, data.numbOfFiles, data.filename, data.hash, data.time, data.address, data.len, data.file_timestamp);
+
                         } else if ( data.op === 'sendFile' ) {
 
-                            //global.received_files.push(data);
-                            //pearlsync_tools.checkReceivedFileSync();
-
-                        } else if ( data.op === 'transferConcluded' ) {
-
-                            sendFileToClient(data.counter+1, data.numbOfFiles, data.filename, data.hash, data.time, data.address, data.len);
-
+                            global.received_files.push(data);
+                            var completed = pearlsync_tools.checkReceivedFileSync();
+    
+                            global.socket[address].write("@IOT@"+JSON.stringify({'op': 'transferConcluded_SendFile', 'machineid': global.machineInfo.id, 'counter': data.counter, "numbOfFiles": data.numbOfFiles, 'filename': data.filename, 'hash': data.hash, 'len': data.len, 'address': data.address, 'time': data.time, 'file_timestamp': data.file_timestamp, 'completed': completed})+"@EOT@");
+    
                         }
                 
                     }

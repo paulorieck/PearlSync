@@ -16,7 +16,7 @@ const unzip = new require('unzip');
 const os = require('os');
 const watch = require('node-watch');
 const node_machine_id = require('node-machine-id');
-const local_client_to_main_server_connection = require('./local_client');
+const local_client = require('./local_client');
 const local_server = require('./local_server');
 const pearlsync_tools = require('./pearlsync_tools');
 
@@ -188,7 +188,7 @@ function startSharesProcessing() {
                 }));
 
             console.log("Starting connection to server!");
-            local_client_to_main_server_connection.startConnectionToServer(server_ip, server_default_port);
+            local_client.startConnectionToServer(server_ip, server_default_port);
 
         }
 
@@ -559,10 +559,12 @@ function sendInstructionsToPairs(instructions) {
                         'machineid': global.machineInfo.id,
                         'filename': instructions[i].path,
                         'hash': instructions[i].shareid,
-                        'time': now})+
+                        'time': now,
+                        'file_timestamp': instructions[i].file_timestamp
+                    })+
                     "@EOT@");
 
-            }/* else if ( instructions[i].op === 'send' ) {
+            } else if ( instructions[i].op === 'send' ) {
 
                 // Get relative path
                 var relative_path = "";
@@ -575,38 +577,16 @@ function sendInstructionsToPairs(instructions) {
                 }
 
                 // Open file to send
-                var base64 = (fs.readFileSync(instructions[i].path)).toString('base64');
+                global.base64[address_key] = (fs.readFileSync(relative_path+instructions[i].path)).toString('base64');
 
-                var len = base64.length;
+                var len = global.base64[address_key].length;
                 var numbOfFiles = Math.ceil(len/global.transaction_syze);
 
-                console.log("File to send: "+relative_path+instructions[i].path);
+                var now = (new Date()).getTime();
 
-                for (var j = 0; j < numbOfFiles; j++) {
+                local_client.sendFileToServer(0, numbOfFiles, instructions[i].path, instructions[i].shareid, now, address_key, len, instructions[i].file_timestamp);
 
-                    var init = j*global.transaction_syze;
-                    var end = (j+1)*global.transaction_syze;
-                    if ( end > len ) {
-                        end = len;
-                    }
-
-                    var base64part = base64.substring(init, end);
-                    global.client[address_key].write(
-                        "@IOT@"+
-                        JSON.stringify({
-                            'op': 'sendFile', 
-                            'machineid': global.machineInfo.id, 
-                            'filename': instructions[i].path, 
-                            'number_of_parts': numbOfFiles, 
-                            'counter': j, 
-                            'base64part': base64part, 
-                            'hash': instructions[i].shareid, 
-                            'time': now})+
-                        "@EOT@");
-
-                }
-
-            }*/
+            }
 
         }
 

@@ -1,4 +1,5 @@
 const fs = require('fs');
+var utimes = require('@ronomon/utimes');
 
 module.exports = {
 
@@ -111,6 +112,8 @@ module.exports = {
 
                     var removed = true;
                     var changed = false;
+                    var sendOrReceive = 0; // 1 == Send / 2 == Get
+                    var file_timestamp = 0;
                     for (var j = 0; j < currentOrLocalStructure.length; j++) {
                         if ( currentOrLocalStructure[j] != null ) {
                             if ( oldOrRemoteStructure[i].path === currentOrLocalStructure[j].path && oldOrRemoteStructure[i].type === currentOrLocalStructure[j].type ) {
@@ -120,6 +123,13 @@ module.exports = {
                                 } else if ( oldOrRemoteStructure[i].type === 'file' ) {
                                     if ( oldOrRemoteStructure[i].last_modification !== currentOrLocalStructure[j].last_modification ) {
                                         changed = true;
+                                        if ( currentOrLocalStructure[j].last_modification > oldOrRemoteStructure[i].last_modification ) {
+                                            sendOrReceive = 2; // Get
+                                            file_timestamp = currentOrLocalStructure[j].last_modification;
+                                        } else {
+                                            sendOrReceive = 1; // Send
+                                            file_timestamp = oldOrRemoteStructure[i].last_modification;
+                                        }
                                     }
                                 }
                                 break;
@@ -133,14 +143,22 @@ module.exports = {
                         if ( type == 'local' ) {
                             instructions.push({'op': 'remove', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
                         } else if ( type == 'remote' ) {
-                            instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                            console.log("timestamp to return 1) "+oldOrRemoteStructure[i].last_modification);
+                            instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': oldOrRemoteStructure[i].last_modification});
                         }
                     } else if ( changed ) {
                         if ( type == 'local' ) {
-                            instructions.push({'op': 'change', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
-                        } /*else if ( type == 'remote' ) {
-                            instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid});
-                        }*/
+                            console.log("timestamp to return 2) "+file_timestamp);
+                            instructions.push({'op': 'add', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid, 'file_timestamp': file_timestamp});
+                        } else if ( type == 'remote' ) {
+                            if ( sendOrReceive == 1 ) {
+                                console.log("timestamp to return 3) "+file_timestamp);
+                                instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': file_timestamp});
+                            } else if ( sendOrReceive == 2 ) {
+                                console.log("timestamp to return 4) "+file_timestamp);
+                                instructions.push({'op': 'get', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': file_timestamp});
+                            }
+                        }
                     }
 
                 }
@@ -170,10 +188,12 @@ module.exports = {
                         var path = currentOrLocalStructure[i].path.replace(relative_path, '');
     
                         if ( type == 'local' ) {
-                            instructions.push({'op': 'add', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'shareid': shareid});
+                            instructions.push({'op': 'add', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'shareid': shareid, 'file_timestamp': currentOrLocalStructure[i].last_modification});
                         } else if ( type == 'remote' ) {
-                            instructions.push({'op': 'get', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'machineid': machineid, 'shareid': shareid});
+                            console.log("timestamp to return 5) "+currentOrLocalStructure[i].file_timestamp);
+                            instructions.push({'op': 'get', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': currentOrLocalStructure[i].last_modification});
                         }
+
                     }
     
                 }
@@ -240,10 +260,15 @@ module.exports = {
                             break;
                         }
                     }
-
                     global.watch_suppress_list.push(global.received_files[i].filename);
 
                     fs.writeFileSync(relative_path+global.received_files[i].filename, completeBase64, {encoding: 'base64'});
+                    console.log('File successfully writen on '+relative_path+global.received_files[i].filename);
+
+                    var time = global.received_files[i].file_timestamp;
+                    utimes.utimes(relative_path+global.received_files[i].filename, time, time, time, function () {
+                        console.log('Alterada a data de '+time);
+                    });
     
                 }
                 
