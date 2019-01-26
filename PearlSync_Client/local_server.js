@@ -164,7 +164,7 @@ module.exports = {
                                                                 }
                                                             }
 
-                                                            var instructions = pearlsync_tools.compareStructures(remote_structure.children, local_structure.children, [], 'remote', global.machineInfo.id, relative_path, hash);
+                                                            var instructions = pearlsync_tools.compareStructures(remote_structure, local_structure, [], 'remote', global.machineInfo.id, relative_path, hash);
                                                             console.log("Instructions to return: "+JSON.stringify(instructions));
 
                                                             global.socket[address].write("@IOT@"+JSON.stringify({'op': 'returnSendSyncroReportFile', 'machineid': global.machineInfo.id, 'hash': hash, 'instructions': instructions})+"@EOT@");

@@ -34,7 +34,7 @@ function processArgs(args) {
     for (var i = 0; i < args.length; i++) {
 
         if ( args[i].indexOf('factory_reset=true') != -1 ) {
-            var files = ['local_data/instructions.json', 'local_data/invitations.json', 'local_data/machine.json', 'local_data/sharelist.json'];
+            var files = ['local_data/instructions.json', 'local_data/invitations.json', 'local_data/machine.json', 'local_data/sharelist.json', 'stored_suppress.json'];
             for (var j = 0; j < files.length; j++) {
                 fs.unlinkSync(files[j]);
                 createFileIfNotExists(files[j], "[]");
@@ -220,50 +220,60 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj, files_leng
     watcher[sharelist_obj.hash] = watch(sharelist_obj.path, {recursive: true});
     watcher[sharelist_obj.hash].on('change', function(evt, name) {
         
-        var op = "";
-        if ( evt === "update" ) {
-            op = "add";
-        } else if ( evt === "remove" ) {
-            op = "remove";
-        }
+        if ( name != ".DS_Store" ) {
 
-        var type = "";
-        if ( fs.lstatSync(name).isDirectory() ) {
-            type = "folder";
-        } else {
-            type = "file";
-        }
-
-        var suppress = false;
-
-        // Checks if the file is inside the receiving list
-        for (var i = 0; i < global.watch_suppress_list.length; i++) {
-            if ( name === sharelist_obj.path+global.watch_suppress_list[i] ) {
-                console.log("Removing from watch_suppress_list +> "+global.watch_suppress_list[i]);
-                global.watch_suppress_list.splice(i, 1);
-                suppress = true;
-                break;
+            var op = "";
+            if ( evt === "update" ) {
+                op = "add";
+            } else if ( evt === "remove" ) {
+                op = "remove";
             }
-        }
-        console.log("global.watch_suppress_list: "+JSON.stringify(global.watch_suppress_list));
 
-        if ( !suppress ) {
-
-            oldInstructions.push({'op': op, 'path': name, 'execution': 0, 'type': type});
-
-            // Update instructions file
-            fs.writeFile("local_data/instructions.json", JSON.stringify(oldInstructions), function(err) {
-                if (err) {
-                    return console.log(err);
-                } else {
-                    if ( !global.instructionsBeingProcessed ) {
-                        global.instructionsBeingProcessed = true;
-                        setTimeout(function() {
-                            sendInstructionsToPairs(oldInstructions);
-                        }, 10000);
-                    }
+            var suppress = false;
+            // Checks if the file is inside the receiving list
+            for (var i = 0; i < global.watch_suppress_list.length; i++) {
+                if ( name === sharelist_obj.path+global.watch_suppress_list[i] ) {
+                    global.watch_suppress_list.splice(i, 1);
+                    suppress = true;
+                    break;
                 }
-            });
+            }
+
+            if ( !suppress ) {
+
+                oldInstructions.push({'op': op, 'path': name});
+
+                // Update instructions file
+                fs.writeFile("local_data/instructions.json", JSON.stringify(oldInstructions), function(err) {
+                    if (err) {
+                        return console.log(err);
+                    } else {
+                        if ( !global.instructionsBeingProcessed ) {
+                            global.instructionsBeingProcessed = true;
+                            setTimeout(function() {
+                                sendInstructionsToPairs(oldInstructions);
+                            }, 10000);
+                        }
+                    }
+                });
+
+            }
+
+            // Write instruction on stored_suppress
+            var stored_suppress = JSON.parse(fs.readFileSync('local_data/stored_suppress.json', 'utf8'));
+            for (var i = 0; i < stored_suppress.length; i++) {
+                var exists = false;
+                if ( stored_suppress[i].op === op && stored_suppress[i].path === path ) {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if ( !exists ) {
+                stored_suppress.push({'op': op, 'path': name});
+            }
+
+            fs.writeFileSync('local_data/stored_suppress.json', JSON.stringify(stored_suppress), 'utf8');
 
         }
 
@@ -271,12 +281,19 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj, files_leng
 
     // Check if there are similar instructions already pending
     for (var i = 0; i < newInstructions.length; i++) {
+
+        var exists = false;
+
         for (var j = 0; j < oldInstructions.length; j++) {
-            if ( newInstructions[i].op === oldInstructions[i].op || newInstructions[i].path === oldInstructions[i].path || newInstructions[i].execution === oldInstructions[i].execution || newInstructions[i].type === oldInstructions[i].type ) {
-            } else {
-                oldInstructions.push(newInstructions[i]);
+            if ( newInstructions[i].op === oldInstructions[j].op || newInstructions[i].path === oldInstructions[j].path ) {
+                exists = true;
             }
         }
+
+        if ( !exists ) {
+            oldInstructions.push(newInstructions[i]);
+        }
+
     }
     newInstructions = null;
 
@@ -306,6 +323,9 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj, files_leng
         });
 
     }
+
+    // Clean stored_suppress.json
+    fs.writeFileSync('local_data/stored_suppress.json', "[]", 'utf8');
 
 }
 
@@ -436,7 +456,7 @@ function processFolderStructure(path, hash) {
                 
     var ldate = (new Date()).getTime();
 
-    var folderStructure = dirTree(path, path);
+    var folderStructure = [dirTree(path, path)];
     var folderStructureStr = JSON.stringify(folderStructure);
 
     fs.writeFileSync('local_data/shares/'+hash+"_"+ldate+'.json', folderStructureStr);

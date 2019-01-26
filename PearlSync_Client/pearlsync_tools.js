@@ -102,8 +102,13 @@ module.exports = {
 
     compareStructures: function (oldOrRemoteStructure, currentOrLocalStructure, instructions, type, machineid, relative_path, shareid) {
 
-        console.log("oldOrRemoteStructure => "+JSON.stringify(oldOrRemoteStructure));
-        console.log("currentOrLocalStructure => "+JSON.stringify(currentOrLocalStructure));
+        //console.log("------------------------------------");
+        //console.log("oldOrRemoteStructure => "+JSON.stringify(oldOrRemoteStructure));
+        //console.log("currentOrLocalStructure => "+JSON.stringify(currentOrLocalStructure));
+        //console.log("------------------------------------");
+
+        //console.log("oldOrRemoteStructure.length: "+oldOrRemoteStructure.length)
+        //console.log("currentOrLocalStructure.length: "+currentOrLocalStructure.length)
 
         for (var i = 0; i < oldOrRemoteStructure.length; i++) {
  
@@ -141,22 +146,18 @@ module.exports = {
             
                     if ( removed ) {
                         if ( type == 'local' ) {
-                            instructions.push({'op': 'remove', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
+                            instructions.push({'op': 'remove', 'path': path, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
                         } else if ( type == 'remote' ) {
-                            console.log("timestamp to return 1) "+oldOrRemoteStructure[i].last_modification);
-                            instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': oldOrRemoteStructure[i].last_modification});
+                            instructions.push({'op': 'send', 'path': path, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': oldOrRemoteStructure[i].last_modification});
                         }
                     } else if ( changed ) {
                         if ( type == 'local' ) {
-                            console.log("timestamp to return 2) "+file_timestamp);
-                            instructions.push({'op': 'add', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid, 'file_timestamp': file_timestamp});
+                            instructions.push({'op': 'add', 'path': path, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid, 'file_timestamp': file_timestamp});
                         } else if ( type == 'remote' ) {
                             if ( sendOrReceive == 1 ) {
-                                console.log("timestamp to return 3) "+file_timestamp);
-                                instructions.push({'op': 'send', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': file_timestamp});
+                                instructions.push({'op': 'send', 'path': path, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': file_timestamp});
                             } else if ( sendOrReceive == 2 ) {
-                                console.log("timestamp to return 4) "+file_timestamp);
-                                instructions.push({'op': 'get', 'path': path, 'execution': 0, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': file_timestamp});
+                                instructions.push({'op': 'get', 'path': path, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': file_timestamp});
                             }
                         }
                     }
@@ -167,39 +168,78 @@ module.exports = {
         }
     
         for (var i = 0; i < currentOrLocalStructure.length; i++) {
-
             if ( currentOrLocalStructure[i] != null ) {
-
                 if ( currentOrLocalStructure[i].path.indexOf(".DS_Store") === -1 ) {
-
                     var added = true;
                     for (var j = 0; j < oldOrRemoteStructure.length; j++) {
                         if ( oldOrRemoteStructure[j] != null ) {
                             if ( oldOrRemoteStructure[j].path === currentOrLocalStructure[i].path && oldOrRemoteStructure[j].type === currentOrLocalStructure[i].type ) {
                                 added = false;
+                                if ( currentOrLocalStructure[i].type === 'folder' ) {
+                                    this.compareStructures(oldOrRemoteStructure[j].children, currentOrLocalStructure[i].children, instructions, type, machineid, relative_path, shareid);
+                                }
                                 break;
                             }
                         }
                     }
-            
-                    if ( added ) {
-    
-                        console.log("currentOrLocalStructure["+i+"].path: "+currentOrLocalStructure[i].path+", relative_path: "+relative_path);
-                        var path = currentOrLocalStructure[i].path.replace(relative_path, '');
-    
-                        if ( type == 'local' ) {
-                            instructions.push({'op': 'add', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'shareid': shareid, 'file_timestamp': currentOrLocalStructure[i].last_modification});
-                        } else if ( type == 'remote' ) {
-                            console.log("timestamp to return 5) "+currentOrLocalStructure[i].file_timestamp);
-                            instructions.push({'op': 'get', 'path': path, 'execution': 0, 'type': currentOrLocalStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': currentOrLocalStructure[i].last_modification});
-                        }
 
+                    if ( added && currentOrLocalStructure[i].type === 'file' ) {
+                        var path = currentOrLocalStructure[i].path.replace(relative_path, '');
+                        if ( type == 'local' ) {
+                            instructions.push({'op': 'add', 'path': path, 'type': currentOrLocalStructure[i].type, 'shareid': shareid, 'file_timestamp': currentOrLocalStructure[i].last_modification});
+                        } else if ( type == 'remote' ) {
+                            instructions.push({'op': 'get', 'path': path, 'type': currentOrLocalStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': currentOrLocalStructure[i].last_modification});
+                        }
                     }
     
                 }
 
             }
 
+        }
+
+        // Check for repeated instructions
+        for (var i = 0; i < instructions.length; i++) {
+            var exists = false;
+            var cont = 0;
+            for (var j = 0; j < instructions.length; j++) {
+                if ( typeof instructions[i].file_timestamp != "undefined" && typeof instructions[j].file_timestamp != "undefined" ) {
+                    if ( instructions[i].op === instructions[j].op && instructions[i].path === instructions[j].path && instructions[i].type === instructions[j].type && instructions[i].file_timestamp === instructions[j].file_timestamp ) {
+                        cont++;
+                        if ( cont > 1 ) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                } else {
+                    if ( instructions[i].op === instructions[j].op && instructions[i].path === instructions[j].type && instructions[i].op === instructions[j].type ) {
+                        cont++;
+                        if ( cont > 1 ) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                }                    
+            }
+            if ( exists ) {
+                instructions.splice(j, 1);
+                j--;
+            }
+        }
+
+        // Check if some of this instructions are already stored at the stored_suppress list
+        var stored_suppress = fs.readFileSync('local_data/stored_suppress.json', 'utf8');
+        for (var i = 0; i < instructions.length; i++) {
+            if ( instructions[i].op == "add" || instructions[i]. op == "remove" ) {
+                var exists = false;
+                for (var j = 0; j < stored_suppress.length; j++) {
+                    if ( instructions[i].op == stored_suppress[j].op && instructions[i].path == stored_suppress[j].path ) {
+                        instructions.splice(i, 1);
+                        i--;
+                        break;
+                    }
+                }
+            }
         }
     
         return instructions;
