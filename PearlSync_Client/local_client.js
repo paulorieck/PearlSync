@@ -102,6 +102,8 @@ module.exports = {
             
                 } else if ( data.op === 'returnGetSharePairs' ) {
             
+                    console.log("returnGetSharePairs ==> data: "+JSON.stringify(data));
+                    global.share_pairs = data.data;
                     pearlsync_tools.returnGetSharePairs(data);
             
                 } else if ( data.op === 'returnShareInvitation' ) {
@@ -416,8 +418,6 @@ module.exports = {
                                 fs.writeFileSync('local_data/instructions.json', JSON.stringify(instructions), 'utf8');
 
                             }
-
-                            
 
                         }
 

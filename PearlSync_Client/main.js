@@ -8,6 +8,7 @@ global.received_files = [];
 global.watch_suppress_list = [];
 global.base64 = [];
 global.sending_data = false;
+global.share_pairs = [];
 
 const fs = require('fs');
 const path = require('path');
@@ -35,7 +36,7 @@ function processArgs(args) {
     for (var i = 0; i < args.length; i++) {
 
         if ( args[i].indexOf('factory_reset=true') != -1 ) {
-            var files = ['local_data/instructions.json', 'local_data/invitations.json', 'local_data/machine.json', 'local_data/sharelist.json', 'stored_suppress.json'];
+            var files = ['local_data/instructions.json', 'local_data/invitations.json', 'local_data/machine.json', 'local_data/sharelist.json', 'local_data/stored_suppress.json'];
             for (var j = 0; j < files.length; j++) {
                 fs.unlinkSync(files[j]);
                 createFileIfNotExists(files[j], "[]");
@@ -574,12 +575,13 @@ function sendInstructionsToPairs(counter, instructions) {
 
     global.instructionsBeingProcessed = true;
 
-    for (var i = 0; i < instructions.length; i++) {
+    //for (var i = 0; i < instructions.length; i++) {
+    if ( counter < instructions.length ) {
 
         // Search for credentials on connectionsConfs
         var address_key = "";
         for (var j = 0; j < global.connectionsConfs.length; j++) {
-            if ( instructions[i].machineid === connectionsConfs[j].machineid ) {
+            if ( instructions[counter].machineid === connectionsConfs[j].machineid ) {
                 address_key = global.connectionsConfs[j].ip+":"+global.connectionsConfs[j].port;
                 break;
             }
@@ -589,34 +591,25 @@ function sendInstructionsToPairs(counter, instructions) {
 
             var now = (new Date()).getTime();
 
-            if ( instructions[i].op === 'get' ) {
+            if ( instructions[counter].op === 'get' ) {
 
                 global.client[address_key].write(
-                    "@IOT@"+
-                    JSON.stringify({
-                        'op': 'getFile',
-                        'machineid': global.machineInfo.id,
-                        'filename': instructions[i].path,
-                        'hash': instructions[i].shareid,
-                        'time': now,
-                        'file_timestamp': instructions[i].file_timestamp
-                    })+
-                    "@EOT@");
+                    "@IOT@"+JSON.stringify({'op': 'getFile', 'machineid': global.machineInfo.id, 'filename': instructions[counter].path, 'hash': instructions[counter].shareid, 'time': now, 'file_timestamp': instructions[counter].file_timestamp})+"@EOT@");
 
-            } else if ( instructions[i].op === 'send' ) {
+            } else if ( instructions[counter].op === 'send' ) {
 
                 // Get relative path
                 var relative_path = "";
                 var share_list = JSON.parse(fs.readFileSync("local_data/sharelist.json", "utf8"));
                 for (var j = 0; j < share_list.length; j++) {
-                    if ( share_list[j].hash === instructions[i].shareid ) {
+                    if ( share_list[j].hash === instructions[counter].shareid ) {
                         relative_path = share_list[j].path;
                         break;
                     }
                 }
 
                 // Open file to send
-                global.base64[address_key] = (fs.readFileSync(relative_path+instructions[i].path)).toString('base64');
+                global.base64[address_key] = (fs.readFileSync(relative_path+instructions[counter].path)).toString('base64');
 
                 var len = global.base64[address_key].length;
                 var numbOfFiles = Math.ceil(len/global.transaction_syze);
@@ -624,12 +617,56 @@ function sendInstructionsToPairs(counter, instructions) {
                 var now = (new Date()).getTime();
 
                 global.sending_data = true;
-                local_client.sendFileToServer(0, numbOfFiles, instructions[i].path, instructions[i].shareid, now, address_key, len, instructions[i].file_timestamp);
+                local_client.sendFileToServer(0, numbOfFiles, instructions[counter].path, instructions[counter].shareid, now, address_key, len, instructions[counter].file_timestamp);
+
+            } else if ( instructions[counter].op === 'add') {
+
+                // Process the add and transforms to send
+                for (var i = 0; i < global.share_pairs[i].length; i++) {
+                    if ( global.share_pairs[i].hash === instructions[counter].shareid ) {
+                        var clients = global.share_pairs[i].clients;
+                        for (var j = 0; j < clients.length; j++) {
+                            instructions.push({'op': 'send', 'path': instructions[counter].path, 'type': instructions[counter].type, 'machineid': clients[j].machineid, 'shareid': instructions[counter].shareid, 'file_timestamp': instructions[counter].file_timestamp});
+                        }
+                        break;
+                    }
+                }
+                instructions.splice(counter, 1);
+
+                fs.writeFileSync('local_data/instructions.json', JSON.stringify(instructions), 'utf8');
+                
+            } else if ( instructions[counter].op === 'remove') {
+
+                // Process the remove operation
+                if ( typeof instructions[counter].machineid == "undefined" || instructions[counter].machineid == null ) {
+
+                    // Process the add and transforms to send
+                    for (var i = 0; i < global.share_pairs[i].length; i++) {
+                        if ( global.share_pairs[i].hash === instructions[counter].shareid ) {
+                            var clients = global.share_pairs[i].clients;
+                            for (var j = 0; j < clients.length; j++) {
+                                instructions.push({'op': 'remove', 'path': instructions[counter].path, 'machineid': clients[j].machineid, 'shareid': instructions[counter].shareid});
+                            }
+                            break;
+                        }
+                    }
+                    instructions.splice(counter, 1);
+
+                    fs.writeFileSync('local_data/instructions.json', JSON.stringify(instructions), 'utf8');
+
+                }
 
             }
 
         }
 
+        var try_ = setInterval(function () {
+            if ( !global.sending_data ) {
+                clearInterval(try_);
+                sendInstructionsToPairs((counter+1), instructions);
+            }
+        }, 100);
+        
     }
 
     global.instructionsBeingProcessed = false;

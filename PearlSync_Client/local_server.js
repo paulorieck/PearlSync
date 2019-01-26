@@ -203,8 +203,13 @@ module.exports = {
 
                             var now = (new Date()).getTime();
 
-                            global.sending_data = true;
-                            sendFileToClient(0, numbOfFiles, data.filename, data.hash, now, address, len, data.file_timestamp);
+                            var try_ = setInterval(function () {
+                                if ( !global.sending_data ) {
+                                    clearInterval(try_);
+                                    global.sending_data = true;
+                                    sendFileToClient(0, numbOfFiles, data.filename, data.hash, now, address, len, data.file_timestamp);
+                                }
+                            }, 100);
                             
                         } else if ( data.op === 'transferConcluded_GetFile' ) {
 

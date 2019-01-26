@@ -52,15 +52,7 @@ module.exports = {
         }
         console.log("Making request for getPunchDetailsFromIDsList...");
         global.client['server'].write(
-            "@IOT@"+
-            JSON.stringify({
-                "op": "getPunchDetailsFromIDsList",
-                "list": machinesids_list,
-                'machineid': global.machineInfo.id,
-                'hostname': global.machineInfo.hostname,
-                'local_ip': global.machineInfo.local_ip
-            })+
-            "@EOT@");
+            "@IOT@"+JSON.stringify({"op": "getPunchDetailsFromIDsList", "list": machinesids_list, 'machineid': global.machineInfo.id, 'hostname': global.machineInfo.hostname, 'local_ip': global.machineInfo.local_ip})+"@EOT@");
     
         global.mainWindow.webContents.executeJavaScript("loadShareList("+JSON.stringify(data.data)+");");
         
@@ -146,7 +138,7 @@ module.exports = {
             
                     if ( removed ) {
                         if ( type == 'local' ) {
-                            instructions.push({'op': 'remove', 'path': path, 'type': oldOrRemoteStructure[i].type, 'shareid': shareid});
+                            instructions.push({'op': 'remove', 'path': path, 'shareid': shareid});
                         } else if ( type == 'remote' ) {
                             instructions.push({'op': 'send', 'path': path, 'type': oldOrRemoteStructure[i].type, 'machineid': machineid, 'shareid': shareid, 'file_timestamp': oldOrRemoteStructure[i].last_modification});
                         }
@@ -228,6 +220,7 @@ module.exports = {
         }
 
         // Check if some of this instructions are already stored at the stored_suppress list
+        this.createFileIfNotExists('local_data/stored_suppress.json', '[]');
         var stored_suppress = fs.readFileSync('local_data/stored_suppress.json', 'utf8');
         for (var i = 0; i < instructions.length; i++) {
             if ( instructions[i].op == "add" || instructions[i]. op == "remove" ) {
