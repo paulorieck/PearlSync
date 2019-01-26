@@ -388,18 +388,21 @@ module.exports = {
                         } else if ( data.op === 'returnGetFile' ) {
 
                             global.received_files.push(data);
-                            pearlsync_tools.checkReceivedFileSync();
+                            var completed = pearlsync_tools.checkReceivedFileSync();
 
-                            global.client[origin_address].write("@IOT@"+JSON.stringify({'op': 'transferConcluded_GetFile', 'machineid': global.machineInfo.id, 'counter': data.counter, "numbOfFiles": data.numbOfFiles, 'filename': data.filename, 'hash': data.hash, 'len': data.len, 'address': data.address, 'time': data.time, 'file_timestamp': data.file_timestamp})+"@EOT@");
+                            global.client[origin_address].write("@IOT@"+JSON.stringify({'op': 'transferConcluded_GetFile', 'machineid': global.machineInfo.id, 'counter': data.counter, "numbOfFiles": data.numbOfFiles, 'filename': data.filename, 'hash': data.hash, 'len': data.len, 'address': data.address, 'time': data.time, 'file_timestamp': data.file_timestamp, 'completed': completed})+"@EOT@");
 
                         } else if ( data.op === 'transferConcluded_SendFile' ) {
 
-                            if ( data.concluded == false ) {
+                            if ( !data.concluded ) {
 
                                 // Keep sending content
+                                global.sending_data = true;
                                 module.exports.sendFileToServer(data.counter+1, data.numbOfFiles, data.filename, data.hash, data.time, data.address, data.len, data.file_timestamp);
 
                             } else {
+
+                                global.sending_data = false;
 
                                 //Remove instruction
                                 // Remove instruction

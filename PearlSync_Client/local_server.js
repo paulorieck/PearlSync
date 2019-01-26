@@ -203,11 +203,18 @@ module.exports = {
 
                             var now = (new Date()).getTime();
 
+                            global.sending_data = true;
                             sendFileToClient(0, numbOfFiles, data.filename, data.hash, now, address, len, data.file_timestamp);
                             
                         } else if ( data.op === 'transferConcluded_GetFile' ) {
 
-                            sendFileToClient(data.counter+1, data.numbOfFiles, data.filename, data.hash, data.time, data.address, data.len, data.file_timestamp);
+                            global.sending_data = true;
+
+                            if ( !data.completed ) {
+                                sendFileToClient(data.counter+1, data.numbOfFiles, data.filename, data.hash, data.time, data.address, data.len, data.file_timestamp);
+                            } else {
+                                global.sending_data = false;
+                            }
 
                         } else if ( data.op === 'sendFile' ) {
 

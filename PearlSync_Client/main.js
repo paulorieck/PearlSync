@@ -7,6 +7,7 @@ global.transaction_syze = 1024*1024; // 1 Mbyte
 global.received_files = [];
 global.watch_suppress_list = [];
 global.base64 = [];
+global.sending_data = false;
 
 const fs = require('fs');
 const path = require('path');
@@ -131,7 +132,7 @@ app.on('ready', function() {
         var instructions = JSON.parse(fs.readFileSync('local_data/instructions.json', 'utf8'));
 
         if ( !global.instructionsBeingProcessed ) {
-            sendInstructionsToPairs(instructions);
+            sendInstructionsToPairs(0, instructions);
         }
 
     }, 120000);
@@ -241,7 +242,25 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj, files_leng
 
             if ( !suppress ) {
 
-                oldInstructions.push({'op': op, 'path': name});
+                var obj = {'op': op, 'path': name.replace(sharelist_obj.path, ''), 'shareid': harelist_obj.hash};
+
+                if ( op === "add" ) {
+
+                    var stats = fs.lstatSync(name);
+
+                    var type = "";
+                    if ( stats.isDirectory() ) {
+                        type = "folder";
+                    } else {
+                        type = "file";
+                    }
+
+                    obj.type = type;
+                    obj.file_timestamp = stats.mtimeMs;
+
+                }
+
+                oldInstructions.push(obj);
 
                 // Update instructions file
                 fs.writeFile("local_data/instructions.json", JSON.stringify(oldInstructions), function(err) {
@@ -251,7 +270,7 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj, files_leng
                         if ( !global.instructionsBeingProcessed ) {
                             global.instructionsBeingProcessed = true;
                             setTimeout(function() {
-                                sendInstructionsToPairs(oldInstructions);
+                                sendInstructionsToPairs(0, oldInstructions);
                             }, 10000);
                         }
                     }
@@ -305,7 +324,7 @@ function sharesProcessingContinuation(oldest_filename, sharelist_obj, files_leng
             if ( !global.instructionsBeingProcessed ) {
                 global.instructionsBeingProcessed = true;
                 setTimeout(function() {
-                    sendInstructionsToPairs(oldInstructions);
+                    sendInstructionsToPairs(0, oldInstructions);
                 }, 10000);
             }
         }
@@ -551,7 +570,7 @@ function dirTree(filename, original_path) {
 
 }
 
-function sendInstructionsToPairs(instructions) {
+function sendInstructionsToPairs(counter, instructions) {
 
     global.instructionsBeingProcessed = true;
 
@@ -604,6 +623,7 @@ function sendInstructionsToPairs(instructions) {
 
                 var now = (new Date()).getTime();
 
+                global.sending_data = true;
                 local_client.sendFileToServer(0, numbOfFiles, instructions[i].path, instructions[i].shareid, now, address_key, len, instructions[i].file_timestamp);
 
             }
